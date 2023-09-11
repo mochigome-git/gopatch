@@ -12,7 +12,7 @@ import (
 var mu sync.RWMutex
 var stopProcessing = make(chan struct{})
 
-func ProcessMQTTData(apiUrl string, serviceRoleKey string) {
+func ProcessMQTTData(apiUrl string, serviceRoleKey string, function string) {
 	startTime := time.Now()
 	for {
 		mu.RLock()
@@ -50,7 +50,7 @@ func ProcessMQTTData(apiUrl string, serviceRoleKey string) {
 		}
 
 		// Send the PATCH request using the sendPatchRequest function
-		_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData)
+		_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
 		if err != nil {
 			panic(err)
 		}

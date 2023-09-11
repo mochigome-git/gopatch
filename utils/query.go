@@ -7,9 +7,9 @@ import (
 	"net/http"
 )
 
-func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte) ([]byte, error) {
+func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, function string) ([]byte, error) {
 	// Create a PATCH request
-	req, err := http.NewRequest("PATCH", apiUrl, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(function, apiUrl, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %v", err)
 	}

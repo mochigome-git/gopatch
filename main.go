@@ -23,6 +23,9 @@ var port string
 // topic of the MQTT broker
 var topic string
 
+// api create request to postgreREST
+var function string
+
 func main() {
 	clientDone := make(chan struct{})
 	stopProcessing := make(chan struct{})
@@ -43,7 +46,7 @@ func main() {
 			case <-stopProcessing:
 				return
 			default:
-				utils.ProcessMQTTData(apiUrl, serviceRoleKey)
+				utils.ProcessMQTTData(apiUrl, serviceRoleKey, function)
 			}
 		}
 	}()
@@ -61,4 +64,5 @@ func init() {
 	broker = os.Getenv("MQTT_HOST")
 	port = os.Getenv("MQTT_PORT")
 	topic = os.Getenv("MQTT_TOPIC")
+	function = os.Getenv("BASH_API")
 }
