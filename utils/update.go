@@ -54,8 +54,6 @@ func ProcessMQTTData(apiUrl string, serviceRoleKey string, function string) {
 		if err != nil {
 			panic(err)
 		}
-
-		//fmt.Println("Response Body:", string(responseBody))
 		// Print the formatted JSON payload with the time duration
 		elapsedTime := time.Since(startTime)
 		prettyPrintJSONWithTime(jsonPayloads, elapsedTime)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"patch/utils"
+	//"github.com/joho/godotenv"
 )
 
 // apiUrl stores the URL for the API service.
@@ -59,6 +60,10 @@ func main() {
 }
 
 func init() {
+	// local test
+	/*if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}*/
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	broker = os.Getenv("MQTT_HOST")

@@ -18,6 +18,7 @@ func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, functio
 	req.Header.Set("apikey", serviceRoleKey)
 	req.Header.Set("Authorization", "Bearer "+serviceRoleKey)
 	req.Header.Set("Content-Type", "application/json")
+	//req.Header.Set("Prefer", "return=minimal")
 
 	// Reuse an HTTP client
 	client := &http.Client{}
@@ -36,9 +37,12 @@ func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, functio
 	}
 
 	// Check the HTTP status code
-	if resp.StatusCode != http.StatusNoContent {
-		return nil, fmt.Errorf("request failed with status code: %d", resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return body, nil
+	case http.StatusNoContent:
+		return nil, nil // No error, as there's no response body
+	default:
+		return nil, fmt.Errorf("request failed with status code: %d - Response: %s", resp.StatusCode, string(body))
 	}
-
-	return body, nil
 }
