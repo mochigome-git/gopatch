@@ -6,9 +6,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/google/uuid"
 )
 
 type MqttData struct {
@@ -16,65 +18,89 @@ type MqttData struct {
 	Value   interface{} `json:"value"`
 }
 
-var ExportedReceivedMessages []MqttData
-var ExportedReceivedMessagesJSON string
+var (
+	receivedMessages      []MqttData
+	receivedMessagesJSON  string
+	receivedMessagesMutex sync.Mutex
+)
 
-func Client(broker string, port string, topic string) {
+var mqttData MqttData
+
+func getClientOptions(broker, port, topic string) *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(fmt.Sprintf("tcp://%s:%s", broker, port))
-	opts.SetClientID("go_mqtt_subscriber")
+	clientID := "go_mqtt_subscriber_" + uuid.New().String()
+	opts.SetClientID(clientID)
 	opts.SetUsername("emqx")
 	opts.SetPassword("public")
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
+	return opts
+}
 
+func Client(broker, port, topic string, receivedMessagesJSONChan chan<- string, clientDone chan<- struct{}) {
+	opts := getClientOptions(broker, port, topic)
 	client := mqtt.NewClient(opts)
 
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Fatalf("Error connecting to MQTT broker: %v", token.Error())
+		log.Printf("Error connecting to MQTT broker: %v", token.Error())
+		return
 	}
 
-	// Subscribe to a topic
-	if token := client.Subscribe(topic, 0, messageReceived); token.Wait() && token.Error() != nil {
-		log.Fatalf("Error subscribing to topic: %v", token.Error())
+	if token := client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
+		messageReceived(client, msg, receivedMessagesJSONChan)
+	}); token.Wait() && token.Error() != nil {
+		log.Printf("Error subscribing to topic: %v", token.Error())
+		return
 	}
 
-	fmt.Printf("Subscribed to topic: %s\n", topic)
+	log.Printf("Subscribed to topic: %s\n", topic)
 
-	// Wait for signals to gracefully shut down the subscriber
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	// Unsubscribe and disconnect from the MQTT broker
 	client.Unsubscribe(topic)
 	client.Disconnect(250)
+
+	close(clientDone)
 }
 
-func messageReceived(client mqtt.Client, msg mqtt.Message) {
-	var mqttData MqttData
+func messageReceived(client mqtt.Client, msg mqtt.Message, receivedMessagesJSONChan chan<- string) {
 	if err := json.Unmarshal(msg.Payload(), &mqttData); err != nil {
-		fmt.Printf("Error parsing JSON: %v\n", err)
+		log.Printf("Error parsing JSON: %v\n", err)
 		return
 	}
 
-	ExportedReceivedMessages = append(ExportedReceivedMessages, mqttData)
-	mu.Lock() // Lock access to the shared resource
-
-	jsonData, err := json.Marshal(ExportedReceivedMessages)
+	receivedMessagesMutex.Lock()
+	defer receivedMessagesMutex.Unlock()
+	receivedMessages = append(receivedMessages, mqttData)
+	jsonData, err := json.Marshal(receivedMessages)
 	if err != nil {
-		fmt.Printf("Error marshaling JSON: %v\n", err)
-		mu.Unlock()
-		return
+		log.Printf("Error marshaling JSON: %v\n", err)
+	} else {
+		receivedMessagesJSON = string(jsonData)
 	}
-	ExportedReceivedMessagesJSON = string(jsonData)
-	mu.Unlock()
+
+	// Send the received JSON data to the processing channel
+	select {
+	case receivedMessagesJSONChan <- receivedMessagesJSON:
+		//log.Printf("Received and sent JSON data: %s\n", receivedMessagesJSON)
+		ResetReceivedMessages()
+	default:
+		//log.Println("Received data dropped, channel full")
+	}
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
-	fmt.Println("Connected to MQTT broker")
+	log.Println("Connected to MQTT broker")
 }
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-	fmt.Printf("Connection lost: %v\n", err)
+	log.Printf("Connection lost: %v\n", err)
+}
+
+func ResetReceivedMessages() {
+	// Reset the receivedMessages slice to contain only mqttData
+	receivedMessages = []MqttData{mqttData}
 }

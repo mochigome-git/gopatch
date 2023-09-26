@@ -2,42 +2,28 @@ package main
 
 import (
 	"os"
-	"sync"
-	"time"
+	"os/signal"
+	"syscall"
 
 	"patch/utils"
 	//"github.com/joho/godotenv"
 )
 
-// apiUrl stores the URL for the API service.
-var apiUrl string
-
-// serviceRoleKey stores the key for authenticating with the service.
-var serviceRoleKey string
-
-// broker stores the MQTT broker's hostname.
-var broker string
-
-// port stores the MQTT broker's port number.
-var port string
-
-// topic of the MQTT broker
-var topic string
-
-// api create request to postgreREST
-var function string
+var (
+	apiUrl         string
+	serviceRoleKey string
+	broker         string
+	port           string
+	topic          string
+	function       string
+)
 
 func main() {
-	clientDone := make(chan struct{})
 	stopProcessing := make(chan struct{})
+	clientDone := make(chan struct{})
+	receivedMessagesJSONChan := make(chan string) // Create a channel for received JSON data
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		utils.Client(broker, port, topic)
-	}()
+	go utils.Client(broker, port, topic, receivedMessagesJSONChan, clientDone)
 
 	go func() {
 		defer close(clientDone)
@@ -47,23 +33,28 @@ func main() {
 			case <-stopProcessing:
 				return
 			default:
-				utils.ProcessMQTTData(apiUrl, serviceRoleKey, function)
+				utils.ProcessMQTTData(apiUrl, serviceRoleKey, receivedMessagesJSONChan, function)
 			}
 		}
 	}()
 
-	time.Sleep(3 * time.Second)
+	// Handle graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	<-sigCh
 
+	// Signal to stop processing
 	close(stopProcessing)
 
-	wg.Wait()
+	// Wait for client to finish
+	<-clientDone
 }
 
 func init() {
 	// local test
-	/*if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}*/
+	//if err := godotenv.Load(); err != nil {
+	//	log.Fatalf("Error loading .env file: %v", err)
+	//}
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	broker = os.Getenv("MQTT_HOST")
