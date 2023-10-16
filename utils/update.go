@@ -12,7 +12,14 @@ var stopProcessing = make(chan struct{})
 
 type JsonPayloads map[string]interface{}
 
-func ProcessMQTTData(apiUrl string, serviceRoleKey string, receivedMessagesJSONChan <-chan string, function string) {
+func ProcessMQTTData(
+	apiUrl string,
+	serviceRoleKey string,
+	receivedMessagesJSONChan <-chan string,
+	function string,
+	trigger string,
+	loop float64,
+) {
 	// Create a map to store all JSON payloads
 	jsonPayloads := make(JsonPayloads)
 	for {
@@ -48,27 +55,39 @@ func ProcessMQTTData(apiUrl string, serviceRoleKey string, receivedMessagesJSONC
 				}
 				time.Sleep(time.Second)
 
-				if time.Since(startTime).Seconds() >= 10 {
+				if time.Since(startTime).Seconds() >= loop {
 					break
 				}
 			}
 
-			// Marshal the entire JSON data
-			jsonData, err := json.Marshal(jsonPayloads)
-			if err != nil {
-				fmt.Println("Error marshaling JSON:", err)
-				return
+			// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
+			calculateAndStoreInklot(jsonPayloads)
+			changeName(jsonPayloads)
+
+			if value, ok := jsonPayloads[trigger]; ok {
+				if m950, ok := value.(float64); ok {
+					if m950 == 1 {
+						jsonData, err := json.Marshal(jsonPayloads)
+						if err != nil {
+							fmt.Println("Error marshaling JSON:", err)
+							return
+						}
+
+						// Send the PATCH request using the sendPatchRequest function
+						_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+						if err != nil {
+							panic(err)
+						}
+
+						// Print the formatted JSON payload with the time duration
+						elapsedTime := time.Since(startTime)
+						prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
+					}
+				}
 			}
 
-			// Send the PATCH request using the sendPatchRequest function
-			_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
-			if err != nil {
-				panic(err)
-			}
-			// Print the formatted JSON payload with the time duration
-			elapsedTime := time.Since(startTime)
-			prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
 			clearCacheAndData(jsonPayloads)
+			return
 
 		case <-stopProcessing:
 			return
@@ -110,4 +129,66 @@ func prettyPrintJSONWithTime(data map[string]interface{}, duration time.Duration
 func clearCacheAndData(collectedData JsonPayloads) JsonPayloads {
 	// Create a new empty map to replace the existing one.
 	return make(JsonPayloads)
+}
+
+func calculateAndStoreInklot(jsonPayloads JsonPayloads) {
+	d171Value, d171Exists := jsonPayloads["d171"].(string)
+	d172Value, d172Exists := jsonPayloads["d172"].(string)
+	d173Value, d173Exists := jsonPayloads["d173"].(string)
+
+	var inklotValue string
+	if d171Exists && d172Exists && d173Exists {
+		inklotValue = d171Value + d172Value + d173Value
+	}
+	jsonPayloads["ink_lot"] = inklotValue
+
+	// Delete the keys "d171", "d172", and "d173" from the map
+	delete(jsonPayloads, "d171")
+	delete(jsonPayloads, "d172")
+	delete(jsonPayloads, "d173")
+}
+
+func changeName(jsonPayloads JsonPayloads) {
+	// Define a mapping of key transformations
+	keyTransformations := map[string]string{
+		"ch1_crtridge_weight_g":   "d162",
+		"ch1_filling_weight_g":    "d164",
+		"ch1_helium_pressure_kpa": "d166",
+		"ch1_head_suction_kpa":    "d167",
+		"ch1_flow_rate_ml":        "d168",
+		"ch1_cycle_time_sec":      "d170",
+		"ch1_error_code":          "d175",
+		"ch2_crtridge_weight_g":   "d462",
+		"ch2_filling_weight_g":    "d464",
+		"ch2_helium_pressure_kpa": "d466",
+		"ch2_head_suction_kpa":    "d467",
+		"ch2_flow_rate_ml":        "d468",
+		"ch2_cycle_time_sec":      "d470",
+		"ch2_error_code":          "d475",
+		"ch3_crtridge_weight_g":   "d762",
+		"ch3_filling_weight_g":    "d764",
+		"ch3_helium_pressure_kpa": "d766",
+		"ch3_head_suction_kpa":    "d767",
+		"ch3_flow_rate_ml":        "d768",
+		"ch3_cycle_time_sec":      "d770",
+		"ch3_error_code":          "d775",
+		"model":                   "d174",
+	}
+
+	jsonPayloads["ch1_sequence"] = jsonPayloads["d760"]
+	jsonPayloads["ch2_sequence"] = jsonPayloads["d760"]
+	jsonPayloads["ch3_sequence"] = jsonPayloads["d760"]
+
+	keysToDelete := []string{
+		"d160", "d460", "d760",
+	}
+
+	for _, key := range keysToDelete {
+		delete(jsonPayloads, key)
+	}
+
+	for newKey, oldKey := range keyTransformations {
+		jsonPayloads[newKey] = jsonPayloads[oldKey]
+		delete(jsonPayloads, oldKey)
+	}
 }

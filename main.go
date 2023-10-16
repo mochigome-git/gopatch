@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"patch/utils"
@@ -16,6 +17,9 @@ var (
 	port           string
 	topic          string
 	function       string
+	trigger        string
+	loopStr        string
+	loop           float64
 )
 
 func main() {
@@ -33,7 +37,14 @@ func main() {
 			case <-stopProcessing:
 				return
 			default:
-				utils.ProcessMQTTData(apiUrl, serviceRoleKey, receivedMessagesJSONChan, function)
+				utils.ProcessMQTTData(
+					apiUrl,
+					serviceRoleKey,
+					receivedMessagesJSONChan,
+					function,
+					trigger,
+					loop,
+				)
 			}
 		}
 	}()
@@ -61,4 +72,7 @@ func init() {
 	port = os.Getenv("MQTT_PORT")
 	topic = os.Getenv("MQTT_TOPIC")
 	function = os.Getenv("BASH_API")
+	trigger = os.Getenv("TRIGGER_DEVICE")
+	loopStr = os.Getenv("LOOPING")
+	loop, _ = strconv.ParseFloat(loopStr, 64)
 }
