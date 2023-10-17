@@ -20,6 +20,7 @@ var (
 	trigger        string
 	loopStr        string
 	loop           float64
+	filter         string
 )
 
 func main() {
@@ -44,6 +45,7 @@ func main() {
 					function,
 					trigger,
 					loop,
+					filter,
 				)
 			}
 		}
@@ -75,4 +77,5 @@ func init() {
 	trigger = os.Getenv("TRIGGER_DEVICE")
 	loopStr = os.Getenv("LOOPING")
 	loop, _ = strconv.ParseFloat(loopStr, 64)
+	filter = os.Getenv("FILTER")
 }

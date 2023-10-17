@@ -19,6 +19,7 @@ func ProcessMQTTData(
 	function string,
 	trigger string,
 	loop float64,
+	filter string,
 ) {
 	// Create a map to store all JSON payloads
 	jsonPayloads := make(JsonPayloads)
@@ -45,43 +46,46 @@ func ProcessMQTTData(
 				jsonPayloads[fieldNameLower] = fieldValue
 			}
 
-			startTime := time.Now()
-
-			for {
-				for _, message := range messages {
-					fieldNameLower := strings.ToLower(message.Address)
-					fieldValue := message.Value
-					jsonPayloads[fieldNameLower] = fieldValue
-				}
-				time.Sleep(time.Second)
-
-				if time.Since(startTime).Seconds() >= loop {
-					break
-				}
-			}
-
-			// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
-			calculateAndStoreInklot(jsonPayloads)
-			changeName(jsonPayloads)
-
 			if value, ok := jsonPayloads[trigger]; ok {
-				if m950, ok := value.(float64); ok {
-					if m950 == 1 {
-						jsonData, err := json.Marshal(jsonPayloads)
-						if err != nil {
-							fmt.Println("Error marshaling JSON:", err)
-							return
+				if trigger, ok := value.(float64); ok {
+					if trigger == 1 {
+						startTime := time.Now()
+						for {
+							for _, message := range messages {
+								fieldNameLower := strings.ToLower(message.Address)
+								fieldValue := message.Value
+								jsonPayloads[fieldNameLower] = fieldValue
+							}
+							time.Sleep(time.Second)
+
+							if time.Since(startTime).Seconds() >= loop {
+								break
+							}
 						}
 
-						// Send the PATCH request using the sendPatchRequest function
-						_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
-						if err != nil {
-							panic(err)
-						}
+						if _filter, ok := jsonPayloads[filter].(float64); ok && _filter != 0 {
+							// The following code will be executed after the loop is broken
+							// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
+							calculateAndStoreInklot(jsonPayloads)
+							changeName(jsonPayloads)
 
-						// Print the formatted JSON payload with the time duration
-						elapsedTime := time.Since(startTime)
-						prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
+							jsonData, err := json.Marshal(jsonPayloads)
+							if err != nil {
+								fmt.Println("Error marshaling JSON:", err)
+								return
+							}
+
+							// Send the PATCH request using the sendPatchRequest function
+							_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+							if err != nil {
+								panic(err)
+							}
+
+							// Print the formatted JSON payload with the time duration
+							elapsedTime := time.Since(startTime)
+							prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
+
+						}
 					}
 				}
 			}
