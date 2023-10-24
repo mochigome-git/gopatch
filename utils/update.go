@@ -142,11 +142,12 @@ func calculateAndStoreInklot(jsonPayloads JsonPayloads) {
 
 	var inklotValue string
 	if d171Exists && d172Exists && d173Exists {
-		inklotValue = d171Value + d172Value + d173Value
+		// それぞれの文字列を逆転して連結します
+		inklotValue = reverseString(d171Value) + reverseString(d172Value) + reverseString(d173Value)
 	}
 	jsonPayloads["ink_lot"] = inklotValue
 
-	// Delete the keys "d171", "d172", and "d173" from the map
+	// "d171"、"d172"、および"d173"のキーをマップから削除
 	delete(jsonPayloads, "d171")
 	delete(jsonPayloads, "d172")
 	delete(jsonPayloads, "d173")
@@ -195,4 +196,12 @@ func changeName(jsonPayloads JsonPayloads) {
 		jsonPayloads[newKey] = jsonPayloads[oldKey]
 		delete(jsonPayloads, oldKey)
 	}
+}
+
+func reverseString(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
 }
