@@ -1,13 +1,15 @@
 package main
 
 import (
+	"log"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 
 	"patch/utils"
-	//"github.com/joho/godotenv"
+
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -65,9 +67,9 @@ func main() {
 
 func init() {
 	// local test
-	//if err := godotenv.Load(); err != nil {
-	//	log.Fatalf("Error loading .env file: %v", err)
-	//}
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	broker = os.Getenv("MQTT_HOST")

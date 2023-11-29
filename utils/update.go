@@ -8,7 +8,18 @@ import (
 	"time"
 )
 
-var stopProcessing = make(chan struct{})
+var (
+	stopProcessing     = make(chan struct{})
+	deviceStartTimeMap = make(map[string]time.Time)
+	// To store process-specific previous trigger keys
+	processPrevTriggerKeyMap = make(map[string]string)
+)
+
+// Define the device struct with the address field
+type TriggerKey struct {
+	triggerKey string
+	caseKey    string
+}
 
 type JsonPayloads map[string]interface{}
 
@@ -46,49 +57,12 @@ func ProcessMQTTData(
 				jsonPayloads[fieldNameLower] = fieldValue
 			}
 
-			if value, ok := jsonPayloads[trigger]; ok {
-				if trigger, ok := value.(float64); ok {
-					if trigger == 1 {
-						startTime := time.Now()
-						for {
-							for _, message := range messages {
-								fieldNameLower := strings.ToLower(message.Address)
-								fieldValue := message.Value
-								jsonPayloads[fieldNameLower] = fieldValue
-							}
-							time.Sleep(time.Second)
+			//fmt.Println(jsonPayloads)
 
-							if time.Since(startTime).Seconds() >= loop {
-								break
-							}
-						}
-
-						if _filter, ok := jsonPayloads[filter].(float64); ok && _filter != 0 {
-							// The following code will be executed after the loop is broken
-							// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
-							calculateAndStoreInklot(jsonPayloads)
-							changeName(jsonPayloads)
-
-							jsonData, err := json.Marshal(jsonPayloads)
-							if err != nil {
-								fmt.Println("Error marshaling JSON:", err)
-								return
-							}
-
-							// Send the PATCH request using the sendPatchRequest function
-							_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
-							if err != nil {
-								panic(err)
-							}
-
-							// Print the formatted JSON payload with the time duration
-							elapsedTime := time.Since(startTime)
-							prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
-
-						}
-					}
-				}
-			}
+			// Start to collect data when trigger specify device
+			// collect the data for few seconds, process for further handling method.
+			// Change Payloads title or delete the extra devices and etc..
+			handleTrigger(jsonPayloads, messages, trigger, loop, filter, apiUrl, serviceRoleKey, function)
 
 			clearCacheAndData(jsonPayloads)
 			return
@@ -110,21 +84,16 @@ func prettyPrintJSONWithTime(data map[string]interface{}, duration time.Duration
 		fmt.Println("Error formatting JSON:", err)
 		return
 	}
-
 	// Define ANSI escape codes for colors
 	greenColor := "\x1b[32m" // Green color
 	pinkColor := "\x1b[35m"  // Pink color
 	resetColor := "\x1b[0m"  // Reset color to default
-
 	// Convert the time duration to milliseconds
 	elapsedTime := fmt.Sprintf("%s%.2f s%s", greenColor, float64(duration.Seconds()), resetColor)
-
 	// Format the JSON data in pink color
 	jsonFormatted := fmt.Sprintf("%s%s%s", pinkColor, string(formatted), resetColor)
-
 	// Concatenate the time and JSON data into a single string
 	output := fmt.Sprintf(">= %s %s", elapsedTime, jsonFormatted)
-
 	// Print the combined output
 	fmt.Println(output)
 }
@@ -153,6 +122,7 @@ func calculateAndStoreInklot(jsonPayloads JsonPayloads) {
 	delete(jsonPayloads, "d173")
 }
 
+// Function to replace device's name to readable key
 func changeName(jsonPayloads JsonPayloads) {
 	// Define a mapping of key transformations
 	keyTransformations := map[string]string{
@@ -180,28 +150,194 @@ func changeName(jsonPayloads JsonPayloads) {
 		"model":                   "d174",
 	}
 
+	// Repeat channel 1's sequence count (PLC's device name) for channel 2 and channel 3.
 	jsonPayloads["ch1_sequence"] = jsonPayloads["d760"]
 	jsonPayloads["ch2_sequence"] = jsonPayloads["d760"]
 	jsonPayloads["ch3_sequence"] = jsonPayloads["d760"]
-
-	keysToDelete := []string{
-		"d160", "d460", "d760",
-	}
-
+	// Remove Channel 1,2,3 key after process
+	keysToDelete := []string{"d160", "d460", "d760"}
 	for _, key := range keysToDelete {
 		delete(jsonPayloads, key)
 	}
 
 	for newKey, oldKey := range keyTransformations {
-		jsonPayloads[newKey] = jsonPayloads[oldKey]
-		delete(jsonPayloads, oldKey)
+		// Check if the old key exists before replacing it
+		if value, oldKeyExists := jsonPayloads[oldKey]; oldKeyExists {
+			jsonPayloads[newKey] = value
+			delete(jsonPayloads, oldKey)
+		}
 	}
 }
 
+// Input and returns a new string with its characters reversed
 func reverseString(s string) string {
 	runes := []rune(s)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
+}
+
+// 指定時間内でキーを受信し、マップに保持して出力する。同等なキーが繰り返されて受信する場合、上書きされていく
+func processMessagesLoop(jsonPayloads JsonPayloads, messages []model.Message, startTime time.Time, loop float64) {
+	for {
+		for _, message := range messages {
+			fieldNameLower := strings.ToLower(message.Address)
+			fieldValue := message.Value
+			jsonPayloads[fieldNameLower] = fieldValue
+		}
+		time.Sleep(time.Second)
+
+		if time.Since(startTime).Seconds() >= loop {
+			break
+		}
+	}
+}
+
+// トリガーキーの羅列からキーとケースナンバーを分割する
+func parseTriggerKey(triggerKey string) []TriggerKey {
+	triggerKeySlice := strings.Split(triggerKey, ",")
+	var triggerkeys []TriggerKey
+
+	for i := 0; i < len(triggerKeySlice); i += 2 {
+		caseNumber := triggerKeySlice[i+1]
+
+		triggerkeys = append(triggerkeys, TriggerKey{
+			triggerKey: triggerKeySlice[i],
+			caseKey:    fmt.Sprint(caseNumber),
+		})
+	}
+
+	return triggerkeys
+}
+
+// Function to generate a unique key for each process based on relevant parameters
+func generateProcessKey(triggerKey string) string {
+	// You can concatenate relevant parameters to create a unique key
+	return triggerKey /* + other parameters as needed */
+}
+
+func handleTrigger(
+	jsonPayloads JsonPayloads,
+	messages []model.Message,
+	triggerKey string,
+	loop float64,
+	filter string,
+	apiUrl string,
+	serviceRoleKey string,
+	function string,
+) {
+
+	// Parse Data to trigger device, case option
+	// Splitting the triggerKey into a slice of strings
+	triggerkeys := parseTriggerKey(triggerKey)
+
+	// Loop the triggerkey and option to case
+	for _, tk := range triggerkeys {
+		switch {
+		case strings.Contains(tk.caseKey, "time.duration"):
+			processKey := generateProcessKey(tk.triggerKey)
+
+			// Check if triggerKey is different from the previous one
+			if tk.triggerKey != processPrevTriggerKeyMap[processKey] {
+				processPrevTriggerKeyMap[processKey] = tk.triggerKey
+
+				fmt.Println(processPrevTriggerKeyMap)
+
+				if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger != 0 {
+					fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, jsonPayloads[tk.triggerKey])
+
+					// Check if device start time is not set
+					if _startTime, exists := deviceStartTimeMap[tk.triggerKey]; !exists {
+						// Set the start time for the device
+						deviceStartTimeMap[tk.triggerKey] = time.Now()
+					} else {
+
+						// Calculate the duration from 1 to 0
+						duration := time.Since(_startTime).Seconds()
+						fmt.Println("Duration for device", tk.triggerKey, ":", duration)
+
+						// Check if the value changed from 1 to 0
+						if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger == 0 {
+							// The following code will be executed after the loop is broken
+							// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
+							calculateAndStoreInklot(jsonPayloads)
+							changeName(jsonPayloads)
+
+							// Call the function to process messages in a loop
+							processMessagesLoop(jsonPayloads, messages, deviceStartTimeMap[tk.triggerKey], loop)
+
+							//jsonData, err := json.Marshal(jsonPayloads)
+							//if err != nil {
+							//    fmt.Println("Error marshaling JSON:", err)
+							//    return
+							//}
+							//
+							//// Send the PATCH request using the sendPatchRequest function
+							//_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+							//if err != nil {
+							//    panic(err)
+							//}
+							//
+							//// Print the formatted JSON payload with the time duration
+							//elapsedTime := time.Since(startTime)
+							//prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
+						}
+
+						// Reset the start time for the device
+						deviceStartTimeMap[tk.triggerKey] = time.Now()
+					}
+				}
+			}
+
+		case tk.caseKey == "standard":
+			// Check if triggerKey is different from the previous one
+			processKey := generateProcessKey(tk.triggerKey)
+
+			// Check if triggerKey is different from the previous one
+			if tk.triggerKey != processPrevTriggerKeyMap[processKey] {
+				processPrevTriggerKeyMap[processKey] = tk.triggerKey
+
+				if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger != 0 {
+					// Store the time when the trigger transitions from 1 to 0
+					var startTime time.Time
+
+					// Call the function to process messages in a loop
+					processMessagesLoop(jsonPayloads, messages, startTime, loop)
+
+					// The following code will be executed after the loop is broken
+					// Call the function to calculate "inklot" and remove "d171", "d172", and "d173"
+					calculateAndStoreInklot(jsonPayloads)
+					changeName(jsonPayloads)
+
+					// Check if the value changed from 1 to 0
+					if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger == 0 {
+						fmt.Println("Case 1")
+						fmt.Println(jsonPayloads)
+
+						jsonData, err := json.Marshal(jsonPayloads)
+						if err != nil {
+							fmt.Println("Error marshaling JSON:", err)
+							return
+						}
+
+						// Send the PATCH request using the sendPatchRequest function
+						_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+						if err != nil {
+							panic(err)
+						}
+
+						// Print the formatted JSON payload with the time duration
+						elapsedTime := time.Since(startTime)
+						prettyPrintJSONWithTime(jsonPayloads, elapsedTime)
+					}
+				}
+			}
+
+		case tk.caseKey == "trigger3":
+			// Handle specific logic for trigger3
+			// This case is for the third condition
+			// Add code to patch data based on the third condition
+		}
+	}
 }
