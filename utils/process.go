@@ -100,14 +100,18 @@ func changeName(jsonPayloads JsonPayloads) {
 func getKeyTransformationsFromEnv() map[string]string {
 	keyTransformations := make(map[string]string)
 
-	// Read environment variables and populate key transformations
-	envPrefix := "KEY_TRANSFORMATION_"
+	// Iterate over all environment variables
 	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, envPrefix) {
-			parts := strings.SplitN(env, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimPrefix(parts[0], envPrefix)
-				value := parts[1]
+		// Split the environment variable into key and value
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			value := parts[1]
+
+			// Check if the key starts with the specified prefix
+			if strings.HasPrefix(key, "KEY_TRANSFORMATION_") {
+				// Trim the prefix and add the key-value pair to the map
+				key = strings.TrimPrefix(key, "KEY_TRANSFORMATION_")
 				keyTransformations[key] = value
 			}
 		}
