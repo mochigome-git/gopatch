@@ -9,21 +9,6 @@ import (
 	"time"
 )
 
-var (
-	stopProcessing     = make(chan struct{})
-	deviceStartTimeMap = make(map[string]time.Time)
-	// To store process-specific previous trigger keys
-	processPrevTriggerKeyMap = make(map[string]string)
-)
-
-// Define the device struct with the address field
-type TriggerKey struct {
-	triggerKey string
-	caseKey    string
-}
-
-type JsonPayloads map[string]interface{}
-
 func ProcessMQTTData(
 	apiUrl string,
 	serviceRoleKey string,
