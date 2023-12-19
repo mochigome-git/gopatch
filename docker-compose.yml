@@ -4,6 +4,8 @@ services:
   subscriber:
     container_name: nk2-msp-subscriber
     image: patch:0.2v
+    env_file:
+     - .env
     restart: always
     environment:
       API_URL: ${API_URL}
