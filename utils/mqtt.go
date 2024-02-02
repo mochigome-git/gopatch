@@ -43,14 +43,14 @@ func Client(broker, port, topic string, receivedMessagesJSONChan chan<- string, 
 	client := mqtt.NewClient(opts)
 
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Printf("Error connecting to MQTT broker: %v", token.Error())
+		log.Fatalf("Error connecting to MQTT broker: %v", token.Error())
 		return
 	}
 
 	if token := client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
 		messageReceived(client, msg, receivedMessagesJSONChan)
 	}); token.Wait() && token.Error() != nil {
-		log.Printf("Error subscribing to topic: %v", token.Error())
+		log.Fatalf("Error subscribing to topic: %v", token.Error())
 		return
 	}
 
@@ -97,7 +97,7 @@ var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 }
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
-	log.Printf("Connection lost: %v\n", err)
+	log.Fatalf("Connection lost: %v\n", err)
 }
 
 func ResetReceivedMessages() {

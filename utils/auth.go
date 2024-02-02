@@ -3,7 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 )
@@ -21,14 +21,14 @@ func Login() {
 	// Marshal the request data to JSON.
 	requestDataJSON, err := json.Marshal(requestData)
 	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
+		log.Fatalf("Error marshaling JSON: %v", err)
 		return
 	}
 
 	// Create a new HTTP request.
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestDataJSON))
 	if err != nil {
-		fmt.Println("Error creating HTTP request:", err)
+		log.Fatalf("Error creating HTTP request: %v", err)
 		return
 	}
 
@@ -40,14 +40,14 @@ func Login() {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending HTTP request:", err)
+		log.Fatalf("Error sending HTTP request: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	// Check the response status code.
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("HTTP request failed with status code:", resp.StatusCode)
+		log.Fatalf("HTTP request failed with status code: %v", resp.StatusCode)
 		return
 	}
 
@@ -55,9 +55,9 @@ func Login() {
 	var response map[string]interface{}
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&response); err != nil {
-		fmt.Println("Error decoding JSON response:", err)
+		log.Fatalf("Error decoding JSON response: %v", err)
 		return
 	}
 
-	fmt.Println("Response:", response)
+	log.Fatalf("Response: %v", response)
 }
