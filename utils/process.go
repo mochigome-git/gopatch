@@ -25,6 +25,19 @@ func processMessagesLoop(jsonPayloads JsonPayloads, messages []model.Message, st
 	}
 }
 
+// processMessagesLoop receives messages within a specified time,
+// handle average value and highest value of message and updates a JSON payload map.
+// If a key is repeated, it overwrites the existing value.
+// Using for Case Special
+// ProcessTriggerGenericSpecial is a generic function to process trigger key and return the corresponding processed payload
+func ProcessTriggerGenericSpecial(jsonPayloads JsonPayloads, messages []model.Message, loop float64, changeNameFunc func(JsonPayloads) map[string]interface{}) map[string]interface{} {
+	startTime := time.Now()
+	processMessagesLoop(jsonPayloads, messages, startTime, 1)
+	processedPayload := changeNameFunc(jsonPayloads)
+
+	return processedPayload
+}
+
 // parseTriggerKey splits a string of trigger keys and case numbers, returning a slice of TriggerKey structs.
 func parseTriggerKey(triggerKey string) []TriggerKey {
 	triggerKeySlice := strings.Split(triggerKey, ",")

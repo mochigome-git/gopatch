@@ -38,6 +38,9 @@ func handleTrigger(
 				return
 			}
 			handleHoldCase(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
+
+		case tk.caseKey == "special":
+			handleSpecialCase(tk, jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 		}
 	}
 }
@@ -197,4 +200,82 @@ func handleHoldCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.M
 		}
 	}
 
+}
+
+// CASE 5, Special;
+// handling a device's highest value and average value and patch it,
+// when the trigger is 1
+func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+	// Assuming these variables need to be declared and initialized
+	var startTime time.Time
+
+	if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok {
+
+		if trigger == 1 {
+			isProcessing = true
+			// Assuming processedPayloadsMap is a map[string]map[string]interface{}
+			if processedPayloadsMap["degas"]["pica1"] == nil {
+				processedPayloadsMap["degas"]["pica1"] = make([]float64, 0)
+			}
+
+			result := ProcessTriggerGenericSpecial(jsonPayloads, messages, trigger, func(payload JsonPayloads) map[string]interface{} {
+				return _hold_changeName_generic(payload, "CASE_5_DEGAS_")
+			})
+
+			// Assuming pica1 is a float64 value in the result map
+			if pica1, ok := result["pica1"].(float64); ok {
+				processedPayloadsMap["degas"]["pica1"] = append(processedPayloadsMap["degas"]["pica1"].([]float64), pica1)
+			}
+
+			//fmt.Println(processedPayloadsMap["degas"]["pica1"])
+		}
+
+		if trigger == 0 && isProcessing {
+			isProcessing = false
+
+			pica1Values, ok := processedPayloadsMap["degas"]["pica1"].([]float64)
+
+			if ok && len(pica1Values) > 0 { // Check if there are values in the slice
+
+				// Calculate max
+				max := pica1Values[0]
+				for _, value := range pica1Values {
+					if value > max {
+						max = value
+					}
+				}
+				processedPayloadsMap["degas"]["pica1_max"] = max
+
+				// Calculate average
+				var sum float64
+				for _, value := range pica1Values {
+					sum += value
+				}
+				average := sum / float64(len(pica1Values))
+				processedPayloadsMap["degas"]["pica1_average"] = average
+			} else {
+				// Handle the case where there are no values in the pica1Values slice
+				fmt.Println("No values found for pica1.")
+			}
+
+			// Clear degas values
+			delete(processedPayloadsMap["degas"], "pica1")
+
+			// Convert processedPayloadsMap["degas"] to JSON, patch to API, print, etc.
+			jsonData, err := json.Marshal(processedPayloadsMap["degas"])
+			if err != nil {
+				fmt.Println("Error marshaling JSON:", err)
+				return
+			}
+
+			_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+			if err != nil {
+				panic(err)
+			}
+
+			elapsedTime := time.Since(startTime)
+			prettyPrintJSONWithTime(processedPayloadsMap["degas"], elapsedTime)
+			processedPayloadsMap["degas"] = make(map[string]interface{})
+		}
+	}
 }

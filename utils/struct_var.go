@@ -27,7 +27,14 @@ var processedPayloadsMap = map[string]map[string]interface{}{
 	"ch2":    make(map[string]interface{}),
 	"ch3":    make(map[string]interface{}),
 	"vacuum": make(map[string]interface{}),
+	"degas":  make(map[string]interface{}),
 }
 
 // To store the trigger of condition judgement in case 4
 var prevSealing float64
+
+// Flag to track if the process is active
+var isProcessing bool
+
+// Case 5
+var triggerChanCase5 = make(chan int)

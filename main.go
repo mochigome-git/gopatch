@@ -64,7 +64,7 @@ func main() {
 
 func init() {
 	// local test
-	//config.LoadEnv(".env.local")
+	//utils.LoadEnv(".env.local")
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	broker = os.Getenv("MQTT_HOST")
