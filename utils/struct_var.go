@@ -28,6 +28,7 @@ var processedPayloadsMap = map[string]map[string]interface{}{
 	"ch3":    make(map[string]interface{}),
 	"vacuum": make(map[string]interface{}),
 	"degas":  make(map[string]interface{}),
+	"do":     make(map[string]interface{}),
 }
 
 // To store the trigger of condition judgement in case 4
