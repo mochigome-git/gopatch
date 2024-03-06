@@ -41,6 +41,9 @@ func handleTrigger(
 
 		case tk.caseKey == "special":
 			handleSpecialCase(tk, jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
+
+		case tk.caseKey == "holdfilling":
+			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 		}
 	}
 }
@@ -278,4 +281,59 @@ func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 			processedPayloadsMap["degas"] = make(map[string]interface{})
 		}
 	}
+}
+
+// CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
+func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+
+	triggerChannels := []string{"ch1", "ch2", "ch3"}
+
+	for _, channel := range triggerChannels {
+		triggerValue, ok := jsonPayloads[os.Getenv("CASE_6_TRIGGER_"+channel)].(float64)
+		if ok && triggerValue == 13 {
+			processedPayloadsMap[channel][channel+"_fill"] = 1
+			isProcessing = true
+		}
+	}
+
+	ch1Success, ok1 := jsonPayloads[os.Getenv("CASE_6_TRIGGER_ch1")].(float64)
+	ch2Success, ok2 := jsonPayloads[os.Getenv("CASE_6_TRIGGER_ch2")].(float64)
+	ch3Success, ok3 := jsonPayloads[os.Getenv("CASE_6_TRIGGER_ch3")].(float64)
+
+	if ok1 && ok2 && ok3 && isProcessing && ch1Success == 0 && ch2Success == 0 && ch3Success == 0 {
+		prevDo := false
+
+		processedPayloadsMap["do"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
+			prevDo = true
+			return _hold_changeName_generic(payload, "CASE_6_DO_")
+		})
+
+		if prevDo {
+			data := MergeNonEmptyMaps(
+				processedPayloadsMap["ch1"],
+				processedPayloadsMap["ch2"],
+				processedPayloadsMap["ch3"],
+				processedPayloadsMap["do"],
+			)
+
+			startTime := time.Now()
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				fmt.Println("Error marshaling JSON:", err)
+				return
+			}
+
+			_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+			if err != nil {
+				panic(err)
+			}
+
+			elapsedTime := time.Since(startTime)
+			prettyPrintJSONWithTime(data, elapsedTime)
+			// Update the previous state of sealing
+			isProcessing = false
+			prevDo = false
+		}
+	}
+
 }
