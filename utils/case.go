@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"patch/model"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -289,8 +290,15 @@ func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, 
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
 
 	for _, channel := range triggerChannels {
+		// Retrieve NUMBERofSTATE from environment variable and convert to float64
+		NUMBERofSTATEStr := os.Getenv("CASE_6_TRIGGER_NUMBERofSTATE")
+		NUMBERofSTATE, _ := strconv.ParseFloat(NUMBERofSTATEStr, 64)
+
+		fmt.Print(NUMBERofSTATE)
+
+		// Retrieve trigger value from JSON payload
 		triggerValue, ok := jsonPayloads[os.Getenv("CASE_6_TRIGGER_"+channel)].(float64)
-		if ok && triggerValue == 13 {
+		if ok && triggerValue == NUMBERofSTATE {
 			processedPayloadsMap[channel][channel+"_fill"] = 1
 			isProcessing = true
 		}
