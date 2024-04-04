@@ -23,9 +23,9 @@ var processPrevTriggerKeyMap = make(map[string]string)
 
 // Create a map to store processed payloads (ch1, ch2, ch3; _xx_jsonPayloads)
 var processedPayloadsMap = map[string]map[string]interface{}{
-	"ch1":    make(map[string]interface{}),
-	"ch2":    make(map[string]interface{}),
-	"ch3":    make(map[string]interface{}),
+	"ch1_":   make(map[string]interface{}),
+	"ch2_":   make(map[string]interface{}),
+	"ch3_":   make(map[string]interface{}),
 	"vacuum": make(map[string]interface{}),
 	"degas":  make(map[string]interface{}),
 	"do":     make(map[string]interface{}),

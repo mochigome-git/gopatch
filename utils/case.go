@@ -38,7 +38,7 @@ func handleTrigger(
 				// Skip further processing if accum_rate is 0
 				return
 			}
-			handleHoldCase(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
+			handleHoldCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		case tk.caseKey == "special":
 			handleSpecialCase(tk, jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
@@ -59,25 +59,6 @@ func handleTimeDurationCase(tk TriggerKey, jsonPayloads JsonPayloads, messages [
 		if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger != 0 {
 			handleTimeDurationTrigger(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
 		}
-	}
-}
-
-// process for case1, check the time taken from 0 to 1.
-func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
-	fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, jsonPayloads[tk.triggerKey])
-
-	if startTime, exists := deviceStartTimeMap[tk.triggerKey]; !exists {
-		deviceStartTimeMap[tk.triggerKey] = time.Now()
-	} else {
-		//duration := time.Since(startTime).Seconds()
-
-		if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger == 0 {
-			calculateAndStoreInklot(jsonPayloads)
-			changeName(jsonPayloads)
-			processMessagesLoop(jsonPayloads, messages, startTime, loop)
-		}
-
-		deviceStartTimeMap[tk.triggerKey] = time.Now()
 	}
 }
 
@@ -146,25 +127,43 @@ func handleTriggerCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 }
 
 // CASE 4, Hold; hold the data and wait until patch trigger
-func handleHoldCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+	// handle the different types (string and float64) of CH1_TRIGGER.
+	// And Store the Filling parameter of CH1 when the trigger is true.
+	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
+	switch v := CH1_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch1_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch1_", jsonPayloads, messages, loop)
+		}
+	}
 
-	if CH1_TRIGGER, ok := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")].(float64); ok && CH1_TRIGGER == 1 {
-		// Use ProcessTriggerGeneric for ch2
-		processedPayloadsMap["ch1"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-			return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_ch1_")
-		})
+	CH2_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH2")]
+	switch v := CH2_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch2_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch2_", jsonPayloads, messages, loop)
+		}
 	}
-	if CH2_TRIGGER, ok := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH2")].(float64); ok && CH2_TRIGGER == 1 {
-		// Use ProcessTriggerGeneric for ch2
-		processedPayloadsMap["ch2"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-			return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_ch2_")
-		})
-	}
-	if CH3_TRIGGER, ok := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH3")].(float64); ok && CH3_TRIGGER == 1 {
-		// Use ProcessTriggerGeneric for ch3
-		processedPayloadsMap["ch3"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-			return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_ch3_")
-		})
+
+	CH3_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH3")]
+	switch v := CH3_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch3_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch3_", jsonPayloads, messages, loop)
+		}
 	}
 
 	if sealing, ok := jsonPayloads[os.Getenv("CASE_4_SEALING")].(float64); ok {
@@ -174,14 +173,15 @@ func handleHoldCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.M
 			processedPayloadsMap["vacuum"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
 				return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
 			})
+			fmt.Println(jsonPayloads)
 			prevSealing = sealing
 		}
 
 		if sealing == 0 && prevSealing == 1 {
 			data := MergeNonEmptyMaps(
-				processedPayloadsMap["ch1"],
-				processedPayloadsMap["ch2"],
-				processedPayloadsMap["ch3"],
+				processedPayloadsMap["ch1_"],
+				processedPayloadsMap["ch2_"],
+				processedPayloadsMap["ch3_"],
 				processedPayloadsMap["vacuum"],
 			)
 

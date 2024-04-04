@@ -190,3 +190,31 @@ func reverseString(s string) string {
 	}
 	return string(runes)
 }
+
+// procees for CASE 4 in case.go, assigning the common logic to a function and then call that function inside each case
+// Handle the common logic for case string and float64
+func processAndPrint(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
+		return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
+	})
+	fmt.Println(processedPayloadsMap[key])
+}
+
+// process for case1, check the time taken from 0 to 1.
+func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+	fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, jsonPayloads[tk.triggerKey])
+
+	if startTime, exists := deviceStartTimeMap[tk.triggerKey]; !exists {
+		deviceStartTimeMap[tk.triggerKey] = time.Now()
+	} else {
+		//duration := time.Since(startTime).Seconds()
+
+		if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger == 0 {
+			calculateAndStoreInklot(jsonPayloads)
+			changeName(jsonPayloads)
+			processMessagesLoop(jsonPayloads, messages, startTime, loop)
+		}
+
+		deviceStartTimeMap[tk.triggerKey] = time.Now()
+	}
+}
