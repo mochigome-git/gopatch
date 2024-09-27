@@ -1,6 +1,9 @@
 package main
 
 import (
+	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -28,29 +31,37 @@ var (
 )
 
 func main() {
+	// Register the profiling handlers with the default HTTP server mux.
+	// This will serve the profiling endpoints at /debug/pprof.
+	/**
+	Memory profile: http://localhost:6060/debug/pprof/heap
+	Goroutine profile: http://localhost:6060/debug/pprof/goroutine
+	CPU profile: http://localhost:6060/debug/pprof/profile
+	**/
+	// Start profiling server
+	go func() {
+		if err := http.ListenAndServe("192.168.0.126:6060", nil); err != nil {
+			log.Fatalf("Error starting profiling server: %v", err)
+		}
+	}()
+
+	// Channels for communication and termination
 	stopProcessing := make(chan struct{})
 	clientDone := make(chan struct{})
 	receivedMessagesJSONChan := make(chan string) // Create a channel for received JSON data
 
+	// Start MQTT client
 	go utils.Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKey, receivedMessagesJSONChan, clientDone)
 
+	// Process MQTT data
 	go func() {
 		defer close(clientDone)
-
 		for {
 			select {
 			case <-stopProcessing:
 				return
 			default:
-				utils.ProcessMQTTData(
-					apiUrl,
-					serviceRoleKey,
-					receivedMessagesJSONChan,
-					function,
-					trigger,
-					loop,
-					filter,
-				)
+				utils.ProcessMQTTData(apiUrl, serviceRoleKey, receivedMessagesJSONChan, function, trigger, loop, filter)
 			}
 		}
 	}()
@@ -69,7 +80,7 @@ func main() {
 
 func init() {
 	// local test
-	//utils.LoadEnv(".env.local")
+	utils.LoadEnv(".env.local")
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	function = os.Getenv("BASH_API")
