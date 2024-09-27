@@ -25,9 +25,11 @@ var (
 	receivedMessages      []MqttData
 	receivedMessagesJSON  string
 	receivedMessagesMutex sync.Mutex
+	mqttData              MqttData
 )
 
-var mqttData MqttData
+// Define the size of the fixed size queue
+const MaxQueueSize = 100
 
 func getClientOptions(broker, port string) *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
@@ -69,7 +71,8 @@ func ECSgetClientOptionsTLS(broker, port, ECScaCert, ECSclientCert, ECSclientKey
 	opts.SetTLSConfig(tlsConfig)
 	opts.OnConnect = connectHandler
 	opts.OnConnectionLost = connectLostHandler
-	return opts, err
+
+	return opts, nil
 }
 
 func Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKey string, receivedMessagesJSONChan chan<- string, clientDone chan<- struct{}) {
@@ -116,30 +119,48 @@ func Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKe
 	close(clientDone)
 }
 
+// messageReceived handles the received MQTT message
 func messageReceived(client mqtt.Client, msg mqtt.Message, receivedMessagesJSONChan chan<- string) {
+	// Unmarshal the received MQTT message payload into mqttData
 	if err := json.Unmarshal(msg.Payload(), &mqttData); err != nil {
 		log.Printf("Error parsing JSON: %v\n", err)
 		return
 	}
 
+	// Lock the mutex to synchronize access to the message queue
 	receivedMessagesMutex.Lock()
 	defer receivedMessagesMutex.Unlock()
+
+	// Append the newly received message to the message queue
 	receivedMessages = append(receivedMessages, mqttData)
+
+	// Limit the size of the message queue to MaxQueueSize
+	if len(receivedMessages) >= MaxQueueSize {
+		resetAndSendMessages(receivedMessagesJSONChan)
+	}
+}
+
+// resetAndSendMessages marshals the received messages, sends them to the processing channel,
+// and resets the receivedMessages queue
+func resetAndSendMessages(receivedMessagesJSONChan chan<- string) {
+	// Marshal the received messages into JSON
 	jsonData, err := json.Marshal(receivedMessages)
 	if err != nil {
 		log.Printf("Error marshaling JSON: %v\n", err)
-	} else {
-		receivedMessagesJSON = string(jsonData)
+		return
 	}
 
-	// Send the received JSON data to the processing channel
+	// Send the JSON data to the processing channel
 	select {
-	case receivedMessagesJSONChan <- receivedMessagesJSON:
-		//log.Printf("Received and sent JSON data: %s\n", receivedMessagesJSON)
-		ResetReceivedMessages()
+	case receivedMessagesJSONChan <- string(jsonData):
+		// Successfully sent JSON data to the processing channel
 	default:
-		//log.Println("Received data dropped, channel full")
+		// Processing channel is full, drop the message or handle accordingly
+		log.Println("Received data dropped, channel full")
 	}
+
+	// Reset the receivedMessages queue
+	receivedMessages = nil
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {

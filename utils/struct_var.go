@@ -23,12 +23,18 @@ var processPrevTriggerKeyMap = make(map[string]string)
 
 // Create a map to store processed payloads (ch1, ch2, ch3; _xx_jsonPayloads)
 var processedPayloadsMap = map[string]map[string]interface{}{
-	"ch1_":   make(map[string]interface{}),
-	"ch2_":   make(map[string]interface{}),
-	"ch3_":   make(map[string]interface{}),
-	"vacuum": make(map[string]interface{}),
-	"degas":  make(map[string]interface{}),
-	"do":     make(map[string]interface{}),
+	"ch1_":       make(map[string]interface{}),
+	"ch2_":       make(map[string]interface{}),
+	"ch3_":       make(map[string]interface{}),
+	"ch1":        make(map[string]interface{}),
+	"ch2":        make(map[string]interface{}),
+	"ch3":        make(map[string]interface{}),
+	"vacuum":     make(map[string]interface{}),
+	"degas":      make(map[string]interface{}),
+	"do":         make(map[string]interface{}),
+	"weightch1_": make(map[string]interface{}),
+	"weightch2_": make(map[string]interface{}),
+	"weightch3_": make(map[string]interface{}),
 }
 
 // To store the trigger of condition judgement in case 4
@@ -39,3 +45,6 @@ var isProcessing bool
 
 // Case 5
 var triggerChanCase5 = make(chan int)
+
+// Track previous trigger state for case 7
+var prevWeightTrigger float64

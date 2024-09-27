@@ -43,8 +43,6 @@ func ProcessMQTTData(
 				jsonPayloads[fieldNameLower] = fieldValue
 			}
 
-			//fmt.Println(jsonPayloads)
-
 			// Start to collect data when trigger specify device
 			// collect the data for few seconds, process for further handling method.
 			// Change Payloads title or delete the extra devices and etc..

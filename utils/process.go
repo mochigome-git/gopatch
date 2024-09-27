@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"patch/model"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -197,7 +198,7 @@ func processAndPrint(key string, jsonPayloads JsonPayloads, messages []model.Mes
 	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
 		return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
 	})
-	fmt.Println(processedPayloadsMap[key])
+	//fmt.Println(processedPayloadsMap[key])
 }
 
 // process for case1, check the time taken from 0 to 1.
@@ -216,5 +217,36 @@ func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, message
 		}
 
 		deviceStartTimeMap[tk.triggerKey] = time.Now()
+	}
+}
+
+// process for CASE 7 in case.go, converting weighing value from different data types to float
+func processWeighData(processedPayloadsMap map[string]map[string]interface{}) {
+	// Define the keys you want to process
+	keysToProcess := []string{"weight_", "weightch1_", "weightch2_", "weightch3_"}
+	for _, key := range keysToProcess {
+		// Accessing the inner map for each key
+		if innerMap, exists := processedPayloadsMap[key]; exists {
+			for innerKey, value := range innerMap {
+				switch v := value.(type) {
+				case string:
+					// Try to convert the string to float
+					if numValue, err := strconv.ParseFloat(v, 64); err == nil {
+						// Divide by 10 after conversion
+						innerMap[innerKey] = numValue / 10.0
+					} else {
+						fmt.Printf("Warning: could not convert string '%s' to float: %v\n", v, err)
+					}
+				case float64:
+					// If the value is already a float64, scale it
+					innerMap[innerKey] = v / 10.0
+				case int:
+					// If the value is an int, convert to float
+					innerMap[innerKey] = float64(v) / 10.0
+				default:
+					fmt.Printf("Warning: unsupported type %T for key '%s'\n", v, innerKey)
+				}
+			}
+		}
 	}
 }
