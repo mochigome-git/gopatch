@@ -45,6 +45,14 @@ func handleTrigger(
 
 		case tk.caseKey == "holdfilling":
 			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
+
+		case tk.caseKey == "weight":
+			if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
+				// Skip further processing if accum_rate is 0
+				return
+			}
+			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
+
 		}
 	}
 }
@@ -128,6 +136,7 @@ func handleTriggerCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 
 // CASE 4, Hold; hold the data and wait until patch trigger
 func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+
 	// handle the different types (string and float64) of CH1_TRIGGER.
 	// And Store the Filling parameter of CH1 when the trigger is true.
 	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
@@ -166,18 +175,20 @@ func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop fl
 		}
 	}
 
+	VACUUM_TRIGGER := jsonPayloads[os.Getenv("CASE_4_VACUUM_reach_20pa")]
+	if VACUUM_TRIGGER != nil {
+		processAndPrintforVacuum("vacuum", jsonPayloads, messages, loop)
+	}
+
 	if sealing, ok := jsonPayloads[os.Getenv("CASE_4_SEALING")].(float64); ok {
-		//fmt.Printf("Sealing: %d; prevSealing: %d\n", int(sealing), int(prevSealing))
-
 		if sealing == 1 {
-			processedPayloadsMap["vacuum"] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-				return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
-			})
-			fmt.Println(jsonPayloads)
+			// Use the function with the condition
+			//processAndPrintforVacuum("vacuum", jsonPayloads, messages, loop)
+			fmt.Println(jsonPayloads["vacuum"])
+			// After the goroutine has finished, set prevSealing = sealing
 			prevSealing = sealing
-		}
-
-		if sealing == 0 && prevSealing == 1 {
+		} else if sealing == 0 && prevSealing == 1 {
+			// Use the function to merge payloads
 			data := MergeNonEmptyMaps(
 				processedPayloadsMap["ch1_"],
 				processedPayloadsMap["ch2_"],
@@ -203,7 +214,15 @@ func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop fl
 			prevSealing = sealing
 		}
 	}
+}
 
+// procees for CASE 4 in case.go, assigning the common logic to a function and then call that function inside each case
+// Handle the common logic for case if not nil
+func processAndPrintforVacuum(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
+		return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
+	})
+	//fmt.Println(processedPayloadsMap[key])
 }
 
 // CASE 5, Special;
@@ -286,15 +305,16 @@ func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 
 // CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
 func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
-
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
 
 	for _, channel := range triggerChannels {
 		// Retrieve NUMBERofSTATE from environment variable and convert to float64
 		NUMBERofSTATEStr := os.Getenv("CASE_6_TRIGGER_NUMBERofSTATE")
-		NUMBERofSTATE, _ := strconv.ParseFloat(NUMBERofSTATEStr, 64)
-
-		fmt.Print(NUMBERofSTATE)
+		NUMBERofSTATE, err := strconv.ParseFloat(NUMBERofSTATEStr, 64)
+		if err != nil {
+			fmt.Println("Error parsing NUMBERofSTATE:", err)
+			continue
+		}
 
 		// Retrieve trigger value from JSON payload
 		triggerValue, ok := jsonPayloads[os.Getenv("CASE_6_TRIGGER_"+channel)].(float64)
@@ -344,4 +364,115 @@ func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, 
 		}
 	}
 
+}
+
+// CASE 7, Weight; hold the data and wait until patch trigger {p/s:updated code for case 4}
+func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+	// handle the different types (string and float64) of CH1_TRIGGER.
+	// And Store the Filling parameter of CH1 when the trigger is true.
+	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
+	switch v := CH1_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch1_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch1_", jsonPayloads, messages, loop)
+		}
+	}
+
+	CH2_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH2")]
+	switch v := CH2_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch2_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch2_", jsonPayloads, messages, loop)
+		}
+	}
+
+	CH3_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH3")]
+	switch v := CH3_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("ch3_", jsonPayloads, messages, loop)
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("ch3_", jsonPayloads, messages, loop)
+		}
+	}
+
+	VACUUM_TRIGGER := jsonPayloads[os.Getenv("CASE_4_VACUUM_reach_20pa")]
+	if VACUUM_TRIGGER != nil {
+		processAndPrintforVacuum("vacuum", jsonPayloads, messages, loop)
+	}
+
+	// Declare variables for weight triggers
+	var weightTriggerCh1, weightTriggerCh2, weightTriggerCh3 float64
+	var ok1, ok2, ok3 bool
+
+	// Attempt to retrieve the weightTriggerCh1 from jsonPayloads and assert its type to float64
+	if weightTriggerCh1, ok1 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH1")].(float64); ok1 {
+		if weightTriggerCh1 == 1 {
+			processAndPrint("weightch1_", jsonPayloads, messages, loop)
+			prevWeightTrigger = weightTriggerCh1
+		}
+	}
+	// Attempt to retrieve the weightTriggerCh2 from jsonPayloads and assert its type to float64
+	if weightTriggerCh2, ok2 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH2")].(float64); ok2 {
+		if weightTriggerCh2 == 1 {
+			processAndPrint("weightch2_", jsonPayloads, messages, loop)
+			prevWeightTrigger = weightTriggerCh2
+		}
+	}
+	// Attempt to retrieve the weightTriggerCh3 from jsonPayloads and assert its type to float64
+	if weightTriggerCh3, ok3 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH3")].(float64); ok3 {
+		if weightTriggerCh3 == 1 {
+			processAndPrint("weightch3_", jsonPayloads, messages, loop)
+			prevWeightTrigger = weightTriggerCh3
+		}
+	}
+
+	// Check if all weight triggers are inactive but was previously active
+	if weightTriggerCh1 == 0 && weightTriggerCh2 == 0 && weightTriggerCh3 == 0 && prevWeightTrigger == 1 {
+		// Print a debug message indicating the transition
+		fmt.Println("You are Here inside another condition")
+		processWeighData(processedPayloadsMap)
+
+		// Merge data from various channels before sending
+		data := MergeNonEmptyMaps(
+			processedPayloadsMap["ch1_"],
+			processedPayloadsMap["ch2_"],
+			processedPayloadsMap["ch3_"],
+			processedPayloadsMap["vacuum"],
+			processedPayloadsMap["weightch1_"],
+			processedPayloadsMap["weightch2_"],
+			processedPayloadsMap["weightch3_"],
+		)
+
+		// Output the combined data before sending to DB
+		fmt.Println("Combined Data Before Sending to DB:", data)
+
+		startTime := time.Now()
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			fmt.Println("Error marshaling JSON:", err)
+			return
+		}
+
+		_, err = sendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+		if err != nil {
+			panic(err)
+		}
+
+		elapsedTime := time.Since(startTime)
+		prettyPrintJSONWithTime(data, elapsedTime)
+
+		// Reset the previous weight trigger to the current state
+		prevWeightTrigger = 0 // Reset as all are inactive
+	}
 }
