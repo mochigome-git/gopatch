@@ -47,4 +47,9 @@ var isProcessing bool
 var triggerChanCase5 = make(chan int)
 
 // Track previous trigger state for case 7
-var prevWeightTrigger float64
+var prevWeightTriggerCh1 bool
+var prevWeightTriggerCh2 bool
+var prevWeightTriggerCh3 bool
+var weightTriggerCh1 bool
+var weightTriggerCh2 bool
+var weightTriggerCh3 bool

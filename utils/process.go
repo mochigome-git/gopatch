@@ -250,3 +250,73 @@ func processWeighData(processedPayloadsMap map[string]map[string]interface{}) {
 		}
 	}
 }
+
+// function to process weight triggers (CH1, CH2, CH3)
+func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+	// CH1 Weight Trigger
+	CH1_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH1")]
+	switch v := CH1_WEIGHT_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("weightch1_", jsonPayloads, messages, loop)
+			weightTriggerCh1 = true
+			prevWeightTriggerCh1 = true
+		} else {
+			weightTriggerCh1 = false
+			prevWeightTriggerCh1 = true
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("weightch1_", jsonPayloads, messages, loop)
+			weightTriggerCh1 = true
+			prevWeightTriggerCh1 = true
+		} else {
+			weightTriggerCh1 = false
+			prevWeightTriggerCh1 = true
+		}
+	}
+
+	// CH2 Weight Trigger
+	CH2_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH2")]
+	switch v := CH2_WEIGHT_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("weightch2_", jsonPayloads, messages, loop)
+			weightTriggerCh2 = true
+			prevWeightTriggerCh2 = true
+		} else {
+			weightTriggerCh2 = false
+			prevWeightTriggerCh2 = true
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("weightch2_", jsonPayloads, messages, loop)
+			weightTriggerCh2 = true
+			prevWeightTriggerCh2 = true
+		} else {
+			weightTriggerCh2 = false
+			prevWeightTriggerCh2 = true
+		}
+	}
+
+	// CH3 Weight Trigger
+	CH3_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH3")]
+	switch v := CH3_WEIGHT_TRIGGER.(type) {
+	case string:
+		if v == "1" {
+			processAndPrint("weightch3_", jsonPayloads, messages, loop)
+			weightTriggerCh3 = true
+			prevWeightTriggerCh3 = true
+		} else {
+			weightTriggerCh3 = false
+		}
+	case float64:
+		if v == 1 {
+			processAndPrint("weightch3_", jsonPayloads, messages, loop)
+			weightTriggerCh3 = true
+			prevWeightTriggerCh3 = true
+		} else {
+			weightTriggerCh3 = false
+		}
+	}
+}

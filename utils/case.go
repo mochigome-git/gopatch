@@ -47,10 +47,10 @@ func handleTrigger(
 			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		case tk.caseKey == "weight":
-			if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
-				// Skip further processing if accum_rate is 0
-				return
-			}
+			//if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
+			//	// Skip further processing if accum_rate is 0
+			//	return
+			//}
 			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		}
@@ -368,8 +368,7 @@ func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, 
 
 // CASE 7, Weight; hold the data and wait until patch trigger {p/s:updated code for case 4}
 func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
-	// handle the different types (string and float64) of CH1_TRIGGER.
-	// And Store the Filling parameter of CH1 when the trigger is true.
+	// Handle different types (string and float64) of CH1_TRIGGER, CH2_TRIGGER, CH3_TRIGGER.
 	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
 	switch v := CH1_TRIGGER.(type) {
 	case string:
@@ -406,44 +405,29 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 		}
 	}
 
+	// Process Vacuum Trigger
 	VACUUM_TRIGGER := jsonPayloads[os.Getenv("CASE_4_VACUUM_reach_20pa")]
 	if VACUUM_TRIGGER != nil {
 		processAndPrintforVacuum("vacuum", jsonPayloads, messages, loop)
 	}
 
-	// Declare variables for weight triggers
-	var weightTriggerCh1, weightTriggerCh2, weightTriggerCh3 float64
-	var ok1, ok2, ok3 bool
+	// Process CH1, CH2, CH3 Weight Triggers
+	ProcessWeightTriggers(jsonPayloads, messages, loop)
 
-	// Attempt to retrieve the weightTriggerCh1 from jsonPayloads and assert its type to float64
-	if weightTriggerCh1, ok1 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH1")].(float64); ok1 {
-		if weightTriggerCh1 == 1 {
-			processAndPrint("weightch1_", jsonPayloads, messages, loop)
-			prevWeightTrigger = weightTriggerCh1
-		}
-	}
-	// Attempt to retrieve the weightTriggerCh2 from jsonPayloads and assert its type to float64
-	if weightTriggerCh2, ok2 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH2")].(float64); ok2 {
-		if weightTriggerCh2 == 1 {
-			processAndPrint("weightch2_", jsonPayloads, messages, loop)
-			prevWeightTrigger = weightTriggerCh2
-		}
-	}
-	// Attempt to retrieve the weightTriggerCh3 from jsonPayloads and assert its type to float64
-	if weightTriggerCh3, ok3 = jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH3")].(float64); ok3 {
-		if weightTriggerCh3 == 1 {
-			processAndPrint("weightch3_", jsonPayloads, messages, loop)
-			prevWeightTrigger = weightTriggerCh3
-		}
-	}
+	fmt.Printf("weightTriggerCh1: %v, prevWeightTriggerCh1: %v\n", weightTriggerCh1, prevWeightTriggerCh1)
+	fmt.Printf("weightTriggerCh2: %v, prevWeightTriggerCh2: %v\n", weightTriggerCh2, prevWeightTriggerCh2)
+	fmt.Printf("weightTriggerCh3: %v, prevWeightTriggerCh3: %v\n", weightTriggerCh3, prevWeightTriggerCh3)
+	fmt.Println(processedPayloadsMap["weightch1_"])
+	fmt.Println(processedPayloadsMap["weightch2_"])
+	fmt.Println(processedPayloadsMap["weightch3_"])
 
-	// Check if all weight triggers are inactive but was previously active
-	if weightTriggerCh1 == 0 && weightTriggerCh2 == 0 && weightTriggerCh3 == 0 && prevWeightTrigger == 1 {
-		// Print a debug message indicating the transition
-		fmt.Println("You are Here inside another condition")
-		processWeighData(processedPayloadsMap)
+	// Check if all weight triggers (CH1, CH2, CH3) are inactive, but were previously active
+	if weightTriggerCh1 == false && weightTriggerCh2 == false && weightTriggerCh3 == false &&
+		prevWeightTriggerCh1 == true && prevWeightTriggerCh2 == true && prevWeightTriggerCh3 == true {
 
-		// Merge data from various channels before sending
+		fmt.Println("All weight triggers are now inactive. Processing the patch.")
+
+		// Merge data from different channels
 		data := MergeNonEmptyMaps(
 			processedPayloadsMap["ch1_"],
 			processedPayloadsMap["ch2_"],
@@ -454,9 +438,10 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 			processedPayloadsMap["weightch3_"],
 		)
 
-		// Output the combined data before sending to DB
+		// Output the combined data before sending to the database
 		fmt.Println("Combined Data Before Sending to DB:", data)
 
+		// Send the data to the database
 		startTime := time.Now()
 		jsonData, err := json.Marshal(data)
 		if err != nil {
@@ -469,10 +454,18 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 			panic(err)
 		}
 
+		// Measure elapsed time and log
 		elapsedTime := time.Since(startTime)
 		prettyPrintJSONWithTime(data, elapsedTime)
 
-		// Reset the previous weight trigger to the current state
-		prevWeightTrigger = 0 // Reset as all are inactive
+		// Clear the processedPayloadsMap after the patch
+		for key := range processedPayloadsMap {
+			delete(processedPayloadsMap, key)
+		}
+
+		// Reset previous triggers to avoid reprocessing
+		prevWeightTriggerCh1 = false
+		prevWeightTriggerCh2 = false
+		prevWeightTriggerCh3 = false
 	}
 }
