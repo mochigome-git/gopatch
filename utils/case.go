@@ -47,10 +47,10 @@ func handleTrigger(
 			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		case tk.caseKey == "weight":
-			//if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
-			//	// Skip further processing if accum_rate is 0
-			//	return
-			//}
+			if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
+				// Skip further processing if accum_rate is 0
+				return
+			}
 			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		}

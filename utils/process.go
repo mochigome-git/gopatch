@@ -263,7 +263,6 @@ func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, 
 			prevWeightTriggerCh1 = true
 		} else {
 			weightTriggerCh1 = false
-			prevWeightTriggerCh1 = true
 		}
 	case float64:
 		if v == 1 {
@@ -272,7 +271,6 @@ func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, 
 			prevWeightTriggerCh1 = true
 		} else {
 			weightTriggerCh1 = false
-			prevWeightTriggerCh1 = true
 		}
 	}
 
@@ -286,7 +284,6 @@ func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, 
 			prevWeightTriggerCh2 = true
 		} else {
 			weightTriggerCh2 = false
-			prevWeightTriggerCh2 = true
 		}
 	case float64:
 		if v == 1 {
@@ -295,7 +292,6 @@ func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, 
 			prevWeightTriggerCh2 = true
 		} else {
 			weightTriggerCh2 = false
-			prevWeightTriggerCh2 = true
 		}
 	}
 
