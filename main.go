@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	_ "net/http/pprof"
+	//"log"
+	//"net/http"
+	//_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -39,11 +39,11 @@ func main() {
 	CPU profile: http://localhost:6060/debug/pprof/profile
 	**/
 	// Start profiling server
-	go func() {
-		if err := http.ListenAndServe("192.168.0.126:6060", nil); err != nil {
-			log.Fatalf("Error starting profiling server: %v", err)
-		}
-	}()
+	//go func() {
+	//	if err := http.ListenAndServe("192.168.0.126:6060", nil); err != nil {
+	//		log.Fatalf("Error starting profiling server: %v", err)
+	//	}
+	//}()
 
 	// Channels for communication and termination
 	stopProcessing := make(chan struct{})
@@ -80,7 +80,7 @@ func main() {
 
 func init() {
 	// local test
-	utils.LoadEnv(".env.local")
+	//utils.LoadEnv(".env.local")
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	function = os.Getenv("BASH_API")
