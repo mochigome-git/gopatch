@@ -80,7 +80,7 @@ func main() {
 
 func init() {
 	// local test
-	//utils.LoadEnv(".env.local")
+	utils.LoadEnv(".env.local")
 	apiUrl = os.Getenv("API_URL")
 	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
 	function = os.Getenv("BASH_API")
