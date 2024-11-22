@@ -47,10 +47,6 @@ func handleTrigger(
 			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		case tk.caseKey == "weight":
-			//if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
-			//	// Skip further processing if accum_rate is 0
-			//	return
-			//}
 			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		}
@@ -413,13 +409,6 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 
 	// Process CH1, CH2, CH3 Weight Triggers
 	ProcessWeightTriggers(jsonPayloads, messages, loop)
-
-	fmt.Printf("weightTriggerCh1: %v, prevWeightTriggerCh1: %v\n", weightTriggerCh1, prevWeightTriggerCh1)
-	fmt.Printf("weightTriggerCh2: %v, prevWeightTriggerCh2: %v\n", weightTriggerCh2, prevWeightTriggerCh2)
-	fmt.Printf("weightTriggerCh3: %v, prevWeightTriggerCh3: %v\n", weightTriggerCh3, prevWeightTriggerCh3)
-	fmt.Println(processedPayloadsMap["weightch1_"])
-	fmt.Println(processedPayloadsMap["weightch2_"])
-	fmt.Println(processedPayloadsMap["weightch3_"])
 
 	// Check if all weight triggers (CH1, CH2, CH3) are inactive, but were previously active
 	if weightTriggerCh1 == false && weightTriggerCh2 == false && weightTriggerCh3 == false &&
