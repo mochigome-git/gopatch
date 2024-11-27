@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"syscall"
 
-	"patch/utils"
+	"gopatch/utils"
 )
 
 // Application-wide configuration variables

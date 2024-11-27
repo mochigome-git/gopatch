@@ -3,8 +3,8 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"gopatch/model"
 	"os"
-	"patch/model"
 	"strconv"
 	"strings"
 	"time"

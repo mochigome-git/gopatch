@@ -173,5 +173,5 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 
 func ResetReceivedMessages() {
 	// Reset the receivedMessages slice to contain only mqttData
-	receivedMessages = []MqttData{mqttData}
+	receivedMessages = []MqttData{}
 }

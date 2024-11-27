@@ -1,82 +1,117 @@
 package utils
 
 import (
-	"fmt"
-	"log"
+	"encoding/json"
+	"strconv"
 	"testing"
-	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-// TestMQTTClient tests the MQTT client subscribing to a topic
-func TestMQTTClient(t *testing.T) {
-	// Test variables, replace with your actual test parameters
-	broker := "localhost" // Replace with actual broker
-	port := "1883"        // Use 1883 for non-TLS or 8883 for TLS
-	topic := "test/topic" // Replace with the topic you want to subscribe to
-	mqttsStr := "false"   // Set to "true" for MQTT over TLS
-	ECScaCert := ""       // CA Cert for TLS (empty if not using TLS)
-	ECSclientCert := ""   // Client Cert for TLS (empty if not using TLS)
-	ECSclientKey := ""    // Client Key for TLS (empty if not using TLS)
+// Mock MQTT Client
+type MockClient struct {
+	mock.Mock
+	mqtt.Client
+}
 
-	// Channel to receive processed messages
+func (m *MockClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
+	args := m.Called(topic, qos, retained, payload)
+	return args.Get(0).(mqtt.Token)
+}
+
+func (m *MockClient) Subscribe(topic string, qos byte, callback mqtt.MessageHandler) mqtt.Token {
+	args := m.Called(topic, qos, callback)
+	if args.Get(0) != nil {
+		callback(nil, args.Get(1).(mqtt.Message))
+	}
+	return args.Get(0).(mqtt.Token)
+}
+
+func (m *MockClient) Connect() mqtt.Token {
+	args := m.Called()
+	return args.Get(0).(mqtt.Token)
+}
+
+func TestMessageReceived(t *testing.T) {
+	// Test Data
+	testPayload := `{"address":"test_address","value":"test_value"}`
+	testMessage := &mockMessage{payload: []byte(testPayload)}
+
+	// Channel to capture JSON messages
 	receivedMessagesJSONChan := make(chan string, 1)
-	clientDone := make(chan struct{})
 
-	// Start the MQTT client
-	go Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKey, receivedMessagesJSONChan, clientDone)
+	// Reset queue
+	ResetReceivedMessages()
 
-	// Wait for some messages to be received
+	// Call the messageReceived function
+	messageReceived(nil, testMessage, receivedMessagesJSONChan)
+
+	// Validate received messages
+	receivedMessagesMutex.Lock()
+	assert.Len(t, receivedMessages, 1, "Message queue should have one message")
+	assert.Equal(t, "test_address", receivedMessages[0].Address)
+	assert.Equal(t, "test_value", receivedMessages[0].Value)
+	receivedMessagesMutex.Unlock()
+
+	// Validate JSON output
 	select {
-	case msg := <-receivedMessagesJSONChan:
-		log.Printf("Received message: %s", msg)
-	case <-time.After(10 * time.Second): // Timeout after 10 seconds if no message received
-		t.Fatal("Test timed out. No message received.")
+	case jsonOutput := <-receivedMessagesJSONChan:
+		var messages []MqttData
+		err := json.Unmarshal([]byte(jsonOutput), &messages)
+		assert.NoError(t, err, "JSON should unmarshal correctly")
+		assert.Len(t, messages, 1, "JSON should contain one message")
+	default:
+		t.Error("Expected JSON output but received none")
+	}
+}
+
+func TestQueueReset(t *testing.T) {
+	// Ensure a clean state
+	receivedMessages = nil
+
+	// Fill the queue to MaxQueueSize
+	for i := 0; i < MaxQueueSize; i++ {
+		message := MqttData{
+			Address: "address_" + strconv.Itoa(i),
+			Value:   i,
+		}
+		receivedMessages = append(receivedMessages, message)
 	}
 
-	// Close the client when done
-	close(clientDone)
-}
+	t.Logf("Queue length before reset: %d", len(receivedMessages)) // Debugging
 
-// TestMQTTPublisher tests the MQTT publisher publishing a message to a topic
-func TestMQTTPublisher(t *testing.T) {
-	// Test variables, same as in the subscriber test
-	broker := "localhost" // Replace with actual broker
-	port := "1883"        // Use 1883 for non-TLS or 8883 for TLS
-	topic := "test/topic" // Topic you want to publish to
+	// Create a channel for JSON data
+	jsonChan := make(chan string, 1)
 
-	// Create MQTT client options
-	opts := getClientOptions(broker, port)
-	client := mqtt.NewClient(opts)
+	// Reset and send messages
+	resetAndSendMessages(jsonChan)
 
-	// Connect the client
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		t.Fatalf("Error connecting to MQTT broker: %v", token.Error())
+	// Verify queue reset
+	assert.Empty(t, receivedMessages, "Message queue should be empty after reset")
+
+	// Verify JSON output
+	select {
+	case jsonData := <-jsonChan:
+		var messages []MqttData
+		err := json.Unmarshal([]byte(jsonData), &messages)
+		assert.NoError(t, err, "JSON should unmarshal correctly")
+		assert.Len(t, messages, MaxQueueSize, "JSON should contain only MaxQueueSize messages")
+	default:
+		t.Error("Expected JSON output but received none")
 	}
-
-	// Publish a test message
-	payload := fmt.Sprintf(`{"address": "localhost", "value": "test"}`)
-	token := client.Publish(topic, 0, false, payload)
-	token.Wait()
-
-	log.Println("Test message published to topic:", topic)
-
-	// Disconnect the client
-	client.Disconnect(250)
 }
 
-func Test(t *testing.T) {
-	// Run the tests
-	fmt.Println("Running MQTT Subscriber Test...")
-	TestMQTTClient(t)
-
-	// Allow time for test completion
-	time.Sleep(2 * time.Second)
-
-	fmt.Println("Running MQTT Publisher Test...")
-	TestMQTTPublisher(t)
-
-	// Wait for test completion
-	time.Sleep(2 * time.Second)
+// Mock MQTT Message
+type mockMessage struct {
+	payload []byte
 }
+
+func (m *mockMessage) Duplicate() bool   { return false }
+func (m *mockMessage) Qos() byte         { return 0 }
+func (m *mockMessage) Retained() bool    { return false }
+func (m *mockMessage) Topic() string     { return "test_topic" }
+func (m *mockMessage) MessageID() uint16 { return 0 }
+func (m *mockMessage) Payload() []byte   { return m.payload }
+func (m *mockMessage) Ack()              {}
