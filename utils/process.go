@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"gopatch/model"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -112,52 +111,6 @@ func changeName(jsonPayloads JsonPayloads) {
 	}
 }
 
-// _hold_changeName_generic is a generic function to replace device names in the JSON payload with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads JsonPayloads, key string) map[string]interface{} {
-	// Define a mapping of key transformations
-	holdkeyTransformations := GetKeyTransformationsFromEnv(key)
-	result := make(map[string]interface{})
-
-	// Iterate through key transformations and apply them, deleting old keys during transformation
-	for newKey, oldKey := range holdkeyTransformations {
-
-		// Replace old key with new key if the old key exists, delete old key
-		if value, oldKeyExists := jsonPayloads[oldKey]; oldKeyExists {
-			//if numericValue, isNumeric := value.(float64); isNumeric && numericValue != 0 {
-			result[newKey] = value
-			// delete(jsonPayloads, oldKey) - consider whether to delete old keys
-			//}
-		}
-	}
-
-	// Apply the specific transformation function
-	return result
-}
-
-// GetKeyTransformationsFromEnv retrieves key transformations from environment variables based on a given prefix.
-func GetKeyTransformationsFromEnv(prefix string) map[string]string {
-	keyTransformations := make(map[string]string)
-
-	// Iterate over all environment variables
-	for _, env := range os.Environ() {
-		// Split the environment variable into key and value
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			key := parts[0]
-			value := parts[1]
-
-			// Check if the key starts with the specified prefix
-			if strings.HasPrefix(key, prefix) {
-				// Trim the prefix and add the key-value pair to the map
-				key = strings.TrimPrefix(key, prefix)
-				keyTransformations[key] = value
-			}
-		}
-	}
-
-	return keyTransformations
-}
-
 // ProcessTriggerGeneric is a generic function to process trigger key and return the corresponding processed payload
 func ProcessTriggerGeneric(jsonPayloads JsonPayloads, messages []model.Message, loop float64, changeNameFunc func(JsonPayloads) map[string]interface{}) map[string]interface{} {
 	startTime := time.Now()
@@ -168,40 +121,24 @@ func ProcessTriggerGeneric(jsonPayloads JsonPayloads, messages []model.Message, 
 	return processedPayload
 }
 
-// MergeNonEmptyMaps merges non-empty maps and returns a new map.
-func MergeNonEmptyMaps(maps ...map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	for _, m := range maps {
-		if len(m) > 0 {
-			for key, value := range m {
-				result[key] = value
-			}
-		}
-	}
-
-	return result
-}
-
-// reverseString takes an input string and returns a new string with its characters reversed.
-func reverseString(s string) string {
-	runes := []rune(s)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
-}
-
-// procees for CASE 4 in case.go, assigning the common logic to a function and then call that function inside each case
-// Handle the common logic for case string and float64
+// Procees to assigning the common logic to a function and then call that function inside each case
+// Handle the common logic for case string and float64; for CASE 4
 func processAndPrint(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
 	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-		return _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
+		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
+
+		// Define the keys to check
+		keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
+
+		// Use the helper function to compare and update the nested map
+		CompareAndUpdateNestedMap(processedPayloadsMap, key, updatedMap, keysToCheck)
+
+		return updatedMap
 	})
-	//fmt.Println(processedPayloadsMap[key])
+	// fmt.Println(processedPayloadsMap[key])
 }
 
-// process for case1, check the time taken from 0 to 1.
+// Process for CASE 1, check the time taken from 0 to 1.
 func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
 	fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, jsonPayloads[tk.triggerKey])
 
@@ -220,99 +157,33 @@ func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, message
 	}
 }
 
-// process for CASE 7 in case.go, converting weighing value from different data types to float
-func processWeighData(processedPayloadsMap map[string]map[string]interface{}) {
-	// Define the keys you want to process
-	keysToProcess := []string{"weight_", "weightch1_", "weightch2_", "weightch3_"}
-	for _, key := range keysToProcess {
-		// Accessing the inner map for each key
-		if innerMap, exists := processedPayloadsMap[key]; exists {
-			for innerKey, value := range innerMap {
-				switch v := value.(type) {
-				case string:
-					// Try to convert the string to float
-					if numValue, err := strconv.ParseFloat(v, 64); err == nil {
-						// Divide by 10 after conversion
-						innerMap[innerKey] = numValue / 10.0
-					} else {
-						fmt.Printf("Warning: could not convert string '%s' to float: %v\n", v, err)
-					}
-				case float64:
-					// If the value is already a float64, scale it
-					innerMap[innerKey] = v / 10.0
-				case int:
-					// If the value is an int, convert to float
-					innerMap[innerKey] = float64(v) / 10.0
-				default:
-					fmt.Printf("Warning: unsupported type %T for key '%s'\n", v, innerKey)
-				}
+// Process for weight triggers (CH1, CH2, CH3); for CASE 7
+func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+	// A helper function to process each weight trigger
+	processWeightTrigger := func(channel string, triggerKey string, weightTrigger *bool, prevWeightTrigger *bool) {
+		triggerValue := jsonPayloads[os.Getenv(triggerKey)]
+		switch v := triggerValue.(type) {
+		case string:
+			if v == "1" {
+				processAndPrint(channel, jsonPayloads, messages, loop)
+				*weightTrigger = true
+				*prevWeightTrigger = true
+			} else {
+				*weightTrigger = false
+			}
+		case float64:
+			if v == 1 {
+				processAndPrint(channel, jsonPayloads, messages, loop)
+				*weightTrigger = true
+				*prevWeightTrigger = true
+			} else {
+				*weightTrigger = false
 			}
 		}
 	}
-}
 
-// function to process weight triggers (CH1, CH2, CH3)
-func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
-	// CH1 Weight Trigger
-	CH1_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH1")]
-	switch v := CH1_WEIGHT_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("weightch1_", jsonPayloads, messages, loop)
-			weightTriggerCh1 = true
-			prevWeightTriggerCh1 = true
-		} else {
-			weightTriggerCh1 = false
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("weightch1_", jsonPayloads, messages, loop)
-			weightTriggerCh1 = true
-			prevWeightTriggerCh1 = true
-		} else {
-			weightTriggerCh1 = false
-		}
-	}
-
-	// CH2 Weight Trigger
-	CH2_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH2")]
-	switch v := CH2_WEIGHT_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("weightch2_", jsonPayloads, messages, loop)
-			weightTriggerCh2 = true
-			prevWeightTriggerCh2 = true
-		} else {
-			weightTriggerCh2 = false
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("weightch2_", jsonPayloads, messages, loop)
-			weightTriggerCh2 = true
-			prevWeightTriggerCh2 = true
-		} else {
-			weightTriggerCh2 = false
-		}
-	}
-
-	// CH3 Weight Trigger
-	CH3_WEIGHT_TRIGGER := jsonPayloads[os.Getenv("CASE_7_TRIGGER_WEIGHING_CH3")]
-	switch v := CH3_WEIGHT_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("weightch3_", jsonPayloads, messages, loop)
-			weightTriggerCh3 = true
-			prevWeightTriggerCh3 = true
-		} else {
-			weightTriggerCh3 = false
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("weightch3_", jsonPayloads, messages, loop)
-			weightTriggerCh3 = true
-			prevWeightTriggerCh3 = true
-		} else {
-			weightTriggerCh3 = false
-		}
-	}
+	// Process weight triggers for CH1, CH2, and CH3
+	processWeightTrigger("weightch1_", "CASE_7_TRIGGER_WEIGHING_CH1", &weightTriggerCh1, &prevWeightTriggerCh1)
+	processWeightTrigger("weightch2_", "CASE_7_TRIGGER_WEIGHING_CH2", &weightTriggerCh2, &prevWeightTriggerCh2)
+	processWeightTrigger("weightch3_", "CASE_7_TRIGGER_WEIGHING_CH3", &weightTriggerCh3, &prevWeightTriggerCh3)
 }

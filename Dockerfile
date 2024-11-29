@@ -21,3 +21,5 @@ CMD ["/app/patch"]
 
 # Build Image with command
 # docker build -t patch:${version} .
+# docker tag patch:${version} mochigome/patch:${version}
+# docker push mochigome/patch:tagname

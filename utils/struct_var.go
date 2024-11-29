@@ -46,10 +46,15 @@ var isProcessing bool
 // Case 5
 var triggerChanCase5 = make(chan int)
 
-// Track previous trigger state for case 7
+// Global variables to Track previous trigger state for Case 7
 var prevWeightTriggerCh1 bool
 var prevWeightTriggerCh2 bool
 var prevWeightTriggerCh3 bool
 var weightTriggerCh1 bool
 var weightTriggerCh2 bool
 var weightTriggerCh3 bool
+var chance bool
+
+// Global variables to track the largest recorded values
+// for each channel Case 7
+var largestWeightCh1, largestWeightCh2, lrgestWeightCh3 float64

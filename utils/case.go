@@ -47,7 +47,11 @@ func handleTrigger(
 			handleHoldFillingCase(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
 
 		case tk.caseKey == "weight":
-			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function)
+			if accum_rate, exists := jsonPayloads[os.Getenv("CASE_4_AVOID_0")].(float64); exists && accum_rate == 0 {
+				// Skip further processing if accum_rate is 0
+				chance = true
+			}
+			handleWeight(jsonPayloads, messages, loop, apiUrl, serviceRoleKey, function, chance)
 
 		}
 	}
@@ -135,41 +139,9 @@ func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop fl
 
 	// handle the different types (string and float64) of CH1_TRIGGER.
 	// And Store the Filling parameter of CH1 when the trigger is true.
-	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
-	switch v := CH1_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch1_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch1_", jsonPayloads, messages, loop)
-		}
-	}
-
-	CH2_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH2")]
-	switch v := CH2_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch2_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch2_", jsonPayloads, messages, loop)
-		}
-	}
-
-	CH3_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH3")]
-	switch v := CH3_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch3_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch3_", jsonPayloads, messages, loop)
-		}
-	}
+	processChannelTrigger("CASE_4_TRIGGER_CH1", "ch1_", jsonPayloads, messages, loop)
+	processChannelTrigger("CASE_4_TRIGGER_CH2", "ch2_", jsonPayloads, messages, loop)
+	processChannelTrigger("CASE_4_TRIGGER_CH3", "ch3_", jsonPayloads, messages, loop)
 
 	VACUUM_TRIGGER := jsonPayloads[os.Getenv("CASE_4_VACUUM_reach_20pa")]
 	if VACUUM_TRIGGER != nil {
@@ -212,18 +184,7 @@ func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop fl
 	}
 }
 
-// procees for CASE 4 in case.go, assigning the common logic to a function and then call that function inside each case
-// Handle the common logic for case if not nil
-func processAndPrintforVacuum(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
-	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop, func(payload JsonPayloads) map[string]interface{} {
-		return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
-	})
-	//fmt.Println(processedPayloadsMap[key])
-}
-
-// CASE 5, Special;
-// handling a device's highest value and average value and patch it,
-// when the trigger is 1
+// CASE 5, Special; handling a device's highest value and average value and patch it, when the trigger is 1
 func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
 	// Assuming these variables need to be declared and initialized
 	var startTime time.Time
@@ -363,43 +324,12 @@ func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, 
 }
 
 // CASE 7, Weight; hold the data and wait until patch trigger {p/s:updated code for case 4}
-func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string, chance bool) {
 	// Handle different types (string and float64) of CH1_TRIGGER, CH2_TRIGGER, CH3_TRIGGER.
-	CH1_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH1")]
-	switch v := CH1_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch1_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch1_", jsonPayloads, messages, loop)
-		}
-	}
-
-	CH2_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH2")]
-	switch v := CH2_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch2_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch2_", jsonPayloads, messages, loop)
-		}
-	}
-
-	CH3_TRIGGER := jsonPayloads[os.Getenv("CASE_4_TRIGGER_CH3")]
-	switch v := CH3_TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint("ch3_", jsonPayloads, messages, loop)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint("ch3_", jsonPayloads, messages, loop)
-		}
-	}
+	// Process triggers for each channel
+	processChannelTrigger("CASE_4_TRIGGER_CH1", "ch1_", jsonPayloads, messages, loop)
+	processChannelTrigger("CASE_4_TRIGGER_CH2", "ch2_", jsonPayloads, messages, loop)
+	processChannelTrigger("CASE_4_TRIGGER_CH3", "ch3_", jsonPayloads, messages, loop)
 
 	// Process Vacuum Trigger
 	VACUUM_TRIGGER := jsonPayloads[os.Getenv("CASE_4_VACUUM_reach_20pa")]
@@ -411,8 +341,8 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 	ProcessWeightTriggers(jsonPayloads, messages, loop)
 
 	// Check if all weight triggers (CH1, CH2, CH3) are inactive, but were previously active
-	if weightTriggerCh1 == false && weightTriggerCh2 == false && weightTriggerCh3 == false &&
-		prevWeightTriggerCh1 == true && prevWeightTriggerCh2 == true && prevWeightTriggerCh3 == true {
+	if !weightTriggerCh1 && !weightTriggerCh2 && !weightTriggerCh3 &&
+		prevWeightTriggerCh1 && prevWeightTriggerCh2 && prevWeightTriggerCh3 && chance {
 
 		fmt.Println("All weight triggers are now inactive. Processing the patch.")
 
@@ -426,9 +356,6 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 			processedPayloadsMap["weightch2_"],
 			processedPayloadsMap["weightch3_"],
 		)
-
-		// Output the combined data before sending to the database
-		fmt.Println("Combined Data Before Sending to DB:", data)
 
 		// Send the data to the database
 		startTime := time.Now()
@@ -456,5 +383,6 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 		prevWeightTriggerCh1 = false
 		prevWeightTriggerCh2 = false
 		prevWeightTriggerCh3 = false
+		chance = false
 	}
 }
