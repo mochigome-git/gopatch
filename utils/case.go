@@ -58,7 +58,9 @@ func handleTrigger(
 }
 
 // CASE 1, time.Duration; handling the process of time taken from 0 to 1, and record the total time duration
-func handleTimeDurationCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+func handleTimeDurationCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message,
+	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+
 	processKey := generateProcessKey(tk.triggerKey)
 
 	if tk.triggerKey != processPrevTriggerKeyMap[processKey] {
@@ -71,7 +73,9 @@ func handleTimeDurationCase(tk TriggerKey, jsonPayloads JsonPayloads, messages [
 }
 
 // CASE 2, Standard; handling a devices value and patch it, when the trigger is different with previous key
-func handleStandardCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+func handleStandardCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message,
+	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+
 	processKey := generateProcessKey(tk.triggerKey)
 
 	if tk.triggerKey != processPrevTriggerKeyMap[processKey] {
@@ -107,7 +111,9 @@ func handleStandardCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mod
 }
 
 // CASE 3, Trigger; handling the device when triggered and hold for 4second to collect data to patch.
-func handleTriggerCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+func handleTriggerCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message,
+	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+
 	if value, ok := jsonPayloads[tk.triggerKey].(float64); ok && value == 1 {
 
 		startTime := time.Now()
@@ -135,7 +141,8 @@ func handleTriggerCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 }
 
 // CASE 4, Hold; hold the data and wait until patch trigger
-func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64,
+	apiUrl string, serviceRoleKey string, function string) {
 
 	// handle the different types (string and float64) of CH1_TRIGGER.
 	// And Store the Filling parameter of CH1 when the trigger is true.
@@ -185,7 +192,8 @@ func handleHoldCase(jsonPayloads JsonPayloads, messages []model.Message, loop fl
 }
 
 // CASE 5, Special; handling a device's highest value and average value and patch it, when the trigger is 1
-func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message,
+	loop float64, apiUrl string, serviceRoleKey string, function string) {
 	// Assuming these variables need to be declared and initialized
 	var startTime time.Time
 
@@ -261,7 +269,9 @@ func handleSpecialCase(tk TriggerKey, jsonPayloads JsonPayloads, messages []mode
 }
 
 // CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
-func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string) {
+func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message,
+	loop float64, apiUrl string, serviceRoleKey string, function string) {
+
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
 
 	for _, channel := range triggerChannels {
@@ -323,8 +333,13 @@ func handleHoldFillingCase(jsonPayloads JsonPayloads, messages []model.Message, 
 
 }
 
-// CASE 7, Weight; hold the data and wait until patch trigger {p/s:updated code for case 4}
-func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64, apiUrl string, serviceRoleKey string, function string, chance bool) {
+// CASE 7, Weight; hold the data and wait until weighing scale trigger to collect data to patch.
+func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop float64,
+	apiUrl string, serviceRoleKey string, function string, chance bool) {
+
+	// Process to handling counter when ch1 started
+	processChannelTrigger("CASE_4_TRIGGER_CH1", "counterch_", jsonPayloads, messages, loop)
+
 	// Handle different types (string and float64) of CH1_TRIGGER, CH2_TRIGGER, CH3_TRIGGER.
 	// Process triggers for each channel
 	processChannelTrigger("CASE_4_TRIGGER_CH1", "ch1_", jsonPayloads, messages, loop)
@@ -355,6 +370,7 @@ func handleWeight(jsonPayloads JsonPayloads, messages []model.Message, loop floa
 			processedPayloadsMap["weightch1_"],
 			processedPayloadsMap["weightch2_"],
 			processedPayloadsMap["weightch3_"],
+			processedPayloadsMap["counterch_"],
 		)
 
 		// Send the data to the database

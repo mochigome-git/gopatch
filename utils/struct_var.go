@@ -35,6 +35,7 @@ var processedPayloadsMap = map[string]map[string]interface{}{
 	"weightch1_": make(map[string]interface{}),
 	"weightch2_": make(map[string]interface{}),
 	"weightch3_": make(map[string]interface{}),
+	"counter":    make(map[string]interface{}),
 }
 
 // To store the trigger of condition judgement in case 4
@@ -54,7 +55,3 @@ var weightTriggerCh1 bool
 var weightTriggerCh2 bool
 var weightTriggerCh3 bool
 var chance bool
-
-// Global variables to track the largest recorded values
-// for each channel Case 7
-var largestWeightCh1, largestWeightCh2, lrgestWeightCh3 float64

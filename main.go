@@ -90,7 +90,7 @@ func main() {
 // init initializes application configuration by loading environment variables.
 func init() {
 	// Load configuration (for local testing)
-	// utils.LoadEnv(".env.local")
+	//utils.LoadEnv(".env.local")
 
 	// Initialize application variable
 	apiUrl = os.Getenv("API_URL")
