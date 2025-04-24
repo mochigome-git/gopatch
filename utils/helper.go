@@ -3,16 +3,21 @@ package utils
 import (
 	"fmt"
 	"gopatch/model"
+	"log"
 	"os"
 	"strings"
 )
 
 // Helper function to process the trigger for each channel;
 // for CASE 4 and CASE 7
-func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads JsonPayloads,
+func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *SafeJsonPayloads,
 	messages []model.Message, loop float64) {
 
-	TRIGGER := jsonPayloads[os.Getenv(triggerEnvVar)]
+	TRIGGER, ok := jsonPayloads.Get(os.Getenv(triggerEnvVar))
+	if !ok {
+		log.Printf("Trigger key %s not found", os.Getenv(triggerEnvVar))
+		return
+	}
 	switch v := TRIGGER.(type) {
 	case string:
 		if v == "1" {
@@ -29,9 +34,9 @@ func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads JsonPayloa
 // to a function and then call that function inside each case
 // Handle the common logic for case if not nil;
 // for CASE 4 & CASE 7.
-func processAndPrintforVacuum(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+func processAndPrintforVacuum(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
 	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop,
-		func(payload JsonPayloads) map[string]interface{} {
+		func(payload *SafeJsonPayloads) map[string]interface{} {
 
 			return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
 		})
@@ -82,7 +87,7 @@ func reverseString(s string) string {
 
 // Helper Function, a generic function to replace device names in the JSON payload
 // with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads JsonPayloads, key string) map[string]interface{} {
+func _hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string) map[string]interface{} {
 	// Define a mapping of key transformations
 	holdkeyTransformations := GetKeyTransformationsFromEnv(key)
 	result := make(map[string]interface{})
@@ -91,7 +96,7 @@ func _hold_changeName_generic(jsonPayloads JsonPayloads, key string) map[string]
 	for newKey, oldKey := range holdkeyTransformations {
 
 		// Replace old key with new key if the old key exists, delete old key
-		if value, oldKeyExists := jsonPayloads[oldKey]; oldKeyExists {
+		if value, oldKeyExists := jsonPayloads.Get(oldKey); oldKeyExists {
 			//if numericValue, isNumeric := value.(float64); isNumeric && numericValue != 0 {
 			result[newKey] = value
 			// delete(jsonPayloads, oldKey) - consider whether to delete old keys
@@ -161,45 +166,46 @@ func parseTriggerKey(triggerKey string) []TriggerKey {
 }
 
 // Helper Function replaces device names in the JSON payload with readable keys.
-func changeName(jsonPayloads JsonPayloads) {
+func changeName(jsonPayloads *SafeJsonPayloads) {
 	// Define a mapping of key transformations
 	keyTransformations := GetKeyTransformationsFromEnv("KEY_TRANSFORMATION_")
 
 	// Repeat channel 1's sequence count (PLC's device name) for channel 2 and channel 3.
-	jsonPayloads["ch1_sequence"] = jsonPayloads["d760"]
-	jsonPayloads["ch2_sequence"] = jsonPayloads["d760"]
-	jsonPayloads["ch3_sequence"] = jsonPayloads["d760"]
-	// Remove Channel 1, 2, 3 keys after processing
-	keysToDelete := []string{"d160", "d460", "d760"}
-	for _, key := range keysToDelete {
-		delete(jsonPayloads, key)
+	if d760, exists := jsonPayloads.Get("d760"); exists {
+		jsonPayloads.Set("ch1_sequence", d760)
+		jsonPayloads.Set("ch2_sequence", d760)
+		jsonPayloads.Set("ch3_sequence", d760)
 	}
+	// Remove Channel 1, 2, 3 keys after processing
+	jsonPayloads.Delete("d160")
+	jsonPayloads.Delete("d460")
+	jsonPayloads.Delete("d760")
 
 	// Iterate through key transformations and apply them, deleting old keys during transformation
 	for newKey, oldKey := range keyTransformations {
 		// Replace old key with new key if the old key exists, delete old key
-		if value, oldKeyExists := jsonPayloads[oldKey]; oldKeyExists {
-			jsonPayloads[newKey] = value
-			delete(jsonPayloads, oldKey)
+		if value, exists := jsonPayloads.Get(oldKey); exists {
+			jsonPayloads.Set(newKey, value)
+			jsonPayloads.Delete(oldKey)
 		}
 	}
 }
 
 // Helper Function to computes and stores an 'ink_lot' value based on specific keys in the JSON payload.
-func calculateAndStoreInklot(jsonPayloads JsonPayloads) {
-	d171Value, d171Exists := jsonPayloads["d171"].(string)
-	d172Value, d172Exists := jsonPayloads["d172"].(string)
-	d173Value, d173Exists := jsonPayloads["d173"].(string)
+func calculateAndStoreInklot(jsonPayloads *SafeJsonPayloads) {
+	d171Value, d171Exists := jsonPayloads.GetString("d171")
+	d172Value, d172Exists := jsonPayloads.GetString("d172")
+	d173Value, d173Exists := jsonPayloads.GetString("d173")
 
 	var inklotValue string
 	if d171Exists && d172Exists && d173Exists {
 		// Concatenate reversed strings of d171, d172, and d173
 		inklotValue = reverseString(d171Value) + reverseString(d172Value) + reverseString(d173Value)
 	}
-	jsonPayloads["ink_lot"] = inklotValue
+	jsonPayloads.Set("ink_lot", inklotValue)
 
 	// Remove "d171", "d172", and "d173" keys from the map
-	delete(jsonPayloads, "d171")
-	delete(jsonPayloads, "d172")
-	delete(jsonPayloads, "d173")
+	jsonPayloads.Delete("d171")
+	jsonPayloads.Delete("d172")
+	jsonPayloads.Delete("d173")
 }

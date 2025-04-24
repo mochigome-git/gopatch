@@ -19,7 +19,7 @@ func ProcessMQTTData(
 	filter string,
 ) {
 	// Create a map to store all JSON payloads
-	jsonPayloads := make(JsonPayloads)
+	jsonPayloads := NewSafeJsonPayloads()
 	for {
 		select {
 		case jsonString := <-receivedMessagesJSONChan:
@@ -40,7 +40,7 @@ func ProcessMQTTData(
 			for _, message := range messages {
 				fieldNameLower := strings.ToLower(message.Address)
 				fieldValue := message.Value
-				jsonPayloads[fieldNameLower] = fieldValue
+				jsonPayloads.Set(fieldNameLower, fieldValue)
 			}
 
 			// Start to collect data when trigger specify device
@@ -62,21 +62,46 @@ func StopProcessing() {
 	close(stopProcessing)
 }
 
-func prettyPrintJSONWithTime(data map[string]interface{}, duration time.Duration) {
-	formatted, err := json.MarshalIndent(data, "", "  ")
+// prettyPrintJSONWithTime handles both map[string]interface{} and *SafeJsonPayloads types
+func prettyPrintJSONWithTime(data interface{}, duration time.Duration) {
+	// Handle nil data case
+	if data == nil {
+		log.Println("Error: Provided data is nil.")
+		return
+	}
+
+	// Determine if data is a map[string]interface{} or *SafeJsonPayloads
+	var formatted []byte
+	var err error
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Handle normal map[string]interface{} directly
+		formatted, err = json.MarshalIndent(v, "", "  ")
+	case *SafeJsonPayloads:
+		// Handle *SafeJsonPayloads, extracting the map from it
+		formatted, err = json.MarshalIndent(v.GetData(), "", "  ")
+	default:
+		log.Println("Error: Unsupported data type.")
+		return
+	}
+
 	if err != nil {
 		fmt.Println("Error formatting JSON:", err)
 		return
 	}
+
 	// Define ANSI escape codes for colors
-	greenColor := "\x1b[32m" // Green color
-	pinkColor := "\x1b[35m"  // Pink color
+	greenColor := "\x1b[32m" // Green color for time
+	pinkColor := "\x1b[35m"  // Pink color for JSON
 	resetColor := "\x1b[0m"  // Reset color to default
-	// Convert the time duration to milliseconds
+
+	// Convert the time duration to seconds and format it
 	elapsedTime := fmt.Sprintf("%s%.2f s%s", greenColor, float64(duration.Seconds()), resetColor)
-	// Format the JSON data in pink color
+
+	// Format the JSON data with pink color
 	jsonFormatted := fmt.Sprintf("%s%s%s", pinkColor, string(formatted), resetColor)
-	// Concatenate the time and JSON data into a single string
+
+	// Concatenate the time and JSON data into a single output string
 	output := fmt.Sprintf(">= %s %s", elapsedTime, jsonFormatted)
 
 	// Print the combined output

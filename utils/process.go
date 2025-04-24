@@ -3,21 +3,23 @@ package utils
 import (
 	"fmt"
 	"gopatch/model"
+	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 // processMessagesLoop receives messages within a specified time and updates a JSON payload map.
 // If a key is repeated, it overwrites the existing value.
-func processMessagesLoop(jsonPayloads JsonPayloads, messages []model.Message,
+func processMessagesLoop(jsonPayloads *SafeJsonPayloads, messages []model.Message,
 	startTime time.Time, loop float64) {
 
 	for {
 		for _, message := range messages {
 			fieldNameLower := strings.ToLower(message.Address)
 			fieldValue := message.Value
-			jsonPayloads[fieldNameLower] = fieldValue
+			jsonPayloads.Set(fieldNameLower, fieldValue)
 		}
 		time.Sleep(time.Second)
 
@@ -33,8 +35,8 @@ func processMessagesLoop(jsonPayloads JsonPayloads, messages []model.Message,
 // ProcessTriggerGenericSpecial is a generic function to process trigger key
 // and return the corresponding processed payload
 // Using for Case Special
-func ProcessTriggerGenericSpecial(jsonPayloads JsonPayloads, messages []model.Message,
-	loop float64, changeNameFunc func(JsonPayloads) map[string]interface{}) map[string]interface{} {
+func ProcessTriggerGenericSpecial(jsonPayloads *SafeJsonPayloads, messages []model.Message,
+	loop float64, changeNameFunc func(*SafeJsonPayloads) map[string]interface{}) map[string]interface{} {
 
 	startTime := time.Now()
 	processMessagesLoop(jsonPayloads, messages, startTime, 1)
@@ -50,15 +52,15 @@ func generateProcessKey(triggerKey string) string {
 }
 
 // clearCacheAndData replaces the existing data map with a new empty one.
-func clearCacheAndData(collectedData JsonPayloads) JsonPayloads {
+func clearCacheAndData(collectedData *SafeJsonPayloads) JsonPayloads {
 	// Create a new empty map to replace the existing one.
 	return make(JsonPayloads)
 }
 
 // ProcessTriggerGeneric is a generic function to process trigger key
 // and return the corresponding processed payload
-func ProcessTriggerGeneric(jsonPayloads JsonPayloads, messages []model.Message,
-	loop float64, changeNameFunc func(JsonPayloads) map[string]interface{}) map[string]interface{} {
+func ProcessTriggerGeneric(jsonPayloads *SafeJsonPayloads, messages []model.Message,
+	loop float64, changeNameFunc func(*SafeJsonPayloads) map[string]interface{}) map[string]interface{} {
 
 	startTime := time.Now()
 	processMessagesLoop(jsonPayloads, messages, startTime, 1)
@@ -70,9 +72,9 @@ func ProcessTriggerGeneric(jsonPayloads JsonPayloads, messages []model.Message,
 
 // Procees to assigning the common logic to a function and then call that function inside each case
 // Handle the common logic for case string and float64; for CASE 4
-func processAndPrint(key string, jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
+func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
 	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages,
-		loop, func(payload JsonPayloads) map[string]interface{} {
+		loop, func(payload *SafeJsonPayloads) map[string]interface{} {
 
 			updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
 
@@ -88,17 +90,26 @@ func processAndPrint(key string, jsonPayloads JsonPayloads, messages []model.Mes
 }
 
 // Process to check the time taken from 0 to 1; or CASE 1
-func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, messages []model.Message,
-	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
-
-	fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, jsonPayloads[tk.triggerKey])
+func handleTimeDurationTrigger(
+	tk TriggerKey,
+	jsonPayloads *SafeJsonPayloads,
+	messages []model.Message,
+	loop float64,
+	filter string,
+	apiUrl string,
+	serviceRoleKey string,
+	function string,
+) {
+	if val, ok := jsonPayloads.Get(tk.triggerKey); ok {
+		fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, val)
+	} else {
+		fmt.Printf("Device name: %s, Payload: <no data>\n", tk.triggerKey)
+	}
 
 	if startTime, exists := deviceStartTimeMap[tk.triggerKey]; !exists {
 		deviceStartTimeMap[tk.triggerKey] = time.Now()
 	} else {
-		//duration := time.Since(startTime).Seconds()
-
-		if trigger, ok := jsonPayloads[tk.triggerKey].(float64); ok && trigger == 0 {
+		if trigger, ok := jsonPayloads.GetFloat64(tk.triggerKey); ok && trigger == 0 {
 			calculateAndStoreInklot(jsonPayloads)
 			changeName(jsonPayloads)
 			processMessagesLoop(jsonPayloads, messages, startTime, loop)
@@ -108,13 +119,22 @@ func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads JsonPayloads, message
 	}
 }
 
-// Process for weight triggers (CH1, CH2, CH3); for CASE 7
-func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, loop float64) {
-	// A helper function to process each weight trigger
+// Process for weight triggers (CH1, CH2, CH3); for CASE 7 & CASE 8
+func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
+	var wg sync.WaitGroup
+
+	// A helper function to process each weight trigger concurrently
 	processWeightTrigger := func(channel string, triggerKey string, weightTrigger *bool,
 		prevWeightTrigger *bool) {
 
-		triggerValue := jsonPayloads[os.Getenv(triggerKey)]
+		defer wg.Done()
+
+		triggerValue, ok := jsonPayloads.Get(os.Getenv(triggerKey))
+		if !ok {
+			log.Printf("Trigger key %s not found", os.Getenv(triggerKey))
+			return
+		}
+		log.Printf("Trigger value for %s: %v", os.Getenv(triggerKey), triggerValue) // Debugging line
 		switch v := triggerValue.(type) {
 		case string:
 			if v == "1" {
@@ -135,8 +155,14 @@ func ProcessWeightTriggers(jsonPayloads JsonPayloads, messages []model.Message, 
 		}
 	}
 
-	// Process weight triggers for CH1, CH2, and CH3
-	processWeightTrigger("weightch1_", "CASE_7_TRIGGER_WEIGHING_CH1", &weightTriggerCh1, &prevWeightTriggerCh1)
-	processWeightTrigger("weightch2_", "CASE_7_TRIGGER_WEIGHING_CH2", &weightTriggerCh2, &prevWeightTriggerCh2)
-	processWeightTrigger("weightch3_", "CASE_7_TRIGGER_WEIGHING_CH3", &weightTriggerCh3, &prevWeightTriggerCh3)
+	// Add three goroutines to the WaitGroup
+	wg.Add(3)
+
+	// Run each trigger processing in its own goroutine
+	go processWeightTrigger("weightch1_", "CASE_7_TRIGGER_WEIGHING_CH1", &weightTriggerCh1, &prevWeightTriggerCh1)
+	go processWeightTrigger("weightch2_", "CASE_7_TRIGGER_WEIGHING_CH2", &weightTriggerCh2, &prevWeightTriggerCh2)
+	go processWeightTrigger("weightch3_", "CASE_7_TRIGGER_WEIGHING_CH3", &weightTriggerCh3, &prevWeightTriggerCh3)
+
+	// Wait for all goroutines to finish
+	wg.Wait()
 }

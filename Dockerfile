@@ -1,5 +1,5 @@
 # Stage 1: Build the Go program
-FROM golang:1.23.3-alpine AS build
+FROM golang:1.24.2-alpine AS build
 WORKDIR /opt/go/patch
 
 # Copy the project files and build the program
@@ -8,7 +8,7 @@ RUN apk --no-cache add gcc musl-dev
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o patch main.go
 
 # Stage 2: Copy the built Go program into a minimal container
-FROM alpine:3.18
+FROM alpine:3.21
 RUN apk --no-cache add ca-certificates
 
 # Copy the Go binary from the first stage
