@@ -1,6 +1,9 @@
 package utils
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Define the device struct with the address field
 type TriggerKey struct {
@@ -20,6 +23,9 @@ var deviceStartTimeMap = make(map[string]time.Time)
 
 // To store process-specific previous trigger keys
 var processPrevTriggerKeyMap = make(map[string]string)
+
+// Sync to protect processedPayloadsMap
+var processedPayloadsMu sync.Mutex
 
 // Create a map to store processed payloads (ch1, ch2, ch3; _xx_jsonPayloads)
 var processedPayloadsMap = map[string]map[string]interface{}{

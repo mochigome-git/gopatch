@@ -3,7 +3,6 @@ package utils
 import (
 	"fmt"
 	"gopatch/model"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -73,15 +72,16 @@ func ProcessTriggerGeneric(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 // Procees to assigning the common logic to a function and then call that function inside each case
 // Handle the common logic for case string and float64; for CASE 4
 func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
+	processedPayloadsMu.Lock()
+	defer processedPayloadsMu.Unlock()
+
 	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages,
 		loop, func(payload *SafeJsonPayloads) map[string]interface{} {
 
 			updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
 
-			// Define the keys to check
 			keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
 
-			// Use the helper function to compare and update the nested map
 			CompareAndUpdateNestedMap(processedPayloadsMap, key, updatedMap, keysToCheck)
 
 			return updatedMap
@@ -90,15 +90,7 @@ func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []mode
 }
 
 // Process to check the time taken from 0 to 1; or CASE 1
-func handleTimeDurationTrigger(
-	tk TriggerKey,
-	jsonPayloads *SafeJsonPayloads,
-	messages []model.Message,
-	loop float64,
-	filter string,
-	apiUrl string,
-	serviceRoleKey string,
-	function string,
+func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64,
 ) {
 	if val, ok := jsonPayloads.Get(tk.triggerKey); ok {
 		fmt.Printf("Device name: %s, Payload: %v\n", tk.triggerKey, val)
@@ -129,12 +121,11 @@ func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 
 		defer wg.Done()
 
-		triggerValue, ok := jsonPayloads.Get(os.Getenv(triggerKey))
+		triggerValue, ok := jsonPayloads.GetDC(os.Getenv(triggerKey))
 		if !ok {
-			log.Printf("Trigger key %s not found", os.Getenv(triggerKey))
+			fmt.Printf("Trigger key %s not found", os.Getenv(triggerKey))
 			return
 		}
-		log.Printf("Trigger value for %s: %v", os.Getenv(triggerKey), triggerValue) // Debugging line
 		switch v := triggerValue.(type) {
 		case string:
 			if v == "1" {

@@ -45,6 +45,6 @@ func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, functio
 	case http.StatusCreated:
 		return nil, nil
 	default:
-		return nil, fmt.Errorf("request failed with status code: %d - Response: %s", resp.StatusCode, string(body))
+		return body, fmt.Errorf("request failed with status code: %d - Response: %s", resp.StatusCode, string(body))
 	}
 }

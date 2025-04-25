@@ -23,13 +23,12 @@ type MqttData struct {
 
 var (
 	receivedMessages      []MqttData
-	receivedMessagesJSON  string
 	receivedMessagesMutex sync.Mutex
 	mqttData              MqttData
 )
 
 // Define the size of the fixed size queue
-const MaxQueueSize = 100
+const MaxQueueSize = 200
 
 func getClientOptions(broker, port string) *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
@@ -101,7 +100,7 @@ func Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKe
 	}
 
 	if token := client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
-		messageReceived(client, msg, receivedMessagesJSONChan)
+		messageReceived(msg, receivedMessagesJSONChan)
 	}); token.Wait() && token.Error() != nil {
 		log.Fatalf("Error subscribing to topic: %v", token.Error())
 		return
@@ -120,7 +119,7 @@ func Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKe
 }
 
 // messageReceived handles the received MQTT message
-func messageReceived(client mqtt.Client, msg mqtt.Message, receivedMessagesJSONChan chan<- string) {
+func messageReceived(msg mqtt.Message, receivedMessagesJSONChan chan<- string) {
 	// Unmarshal the received MQTT message payload into mqttData
 	if err := json.Unmarshal(msg.Payload(), &mqttData); err != nil {
 		log.Printf("Error parsing JSON: %v\n", err)
@@ -134,10 +133,12 @@ func messageReceived(client mqtt.Client, msg mqtt.Message, receivedMessagesJSONC
 	// Append the newly received message to the message queue
 	receivedMessages = append(receivedMessages, mqttData)
 
-	// Limit the size of the message queue to MaxQueueSize
+	// If the queue reaches MaxQueueSize, reset and send the messages
 	if len(receivedMessages) >= MaxQueueSize {
+		//log.Println("Queue is full, resetting and sending messages")
 		resetAndSendMessages(receivedMessagesJSONChan)
 	}
+
 }
 
 // resetAndSendMessages marshals the received messages, sends them to the processing channel,
@@ -150,13 +151,12 @@ func resetAndSendMessages(receivedMessagesJSONChan chan<- string) {
 		return
 	}
 
-	// Send the JSON data to the processing channel
 	select {
 	case receivedMessagesJSONChan <- string(jsonData):
 		// Successfully sent JSON data to the processing channel
 	default:
 		// Processing channel is full, drop the message or handle accordingly
-		log.Println("Received data dropped, channel full")
+		//log.Println("Received data dropped, channel full")
 	}
 
 	// Reset the receivedMessages queue

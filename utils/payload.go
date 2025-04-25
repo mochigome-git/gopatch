@@ -56,5 +56,37 @@ func (s *SafeJsonPayloads) GetString(key string) (string, bool) {
 func (s *SafeJsonPayloads) GetData() map[string]interface{} {
 	s.mu.RLock() // Lock for reading
 	defer s.mu.RUnlock()
-	return s.data
+
+	copyMap := make(map[string]interface{}, len(s.data))
+	for k, v := range s.data {
+		copyMap[k] = v
+	}
+	return copyMap
+}
+
+func (s *SafeJsonPayloads) GetDC(key string) (interface{}, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	val, exists := s.data[key]
+	if !exists {
+		return nil, false
+	}
+
+	// Perform a shallow copy for basic types or use deep copy logic for composite types
+	switch v := val.(type) {
+	case map[string]interface{}:
+		copyMap := make(map[string]interface{}, len(v))
+		for k, val := range v {
+			copyMap[k] = val // note: values aren't deep-copied
+		}
+		return copyMap, true
+	case []interface{}:
+		copySlice := make([]interface{}, len(v))
+		copy(copySlice, v)
+		return copySlice, true
+	default:
+		// For basic types (int, float64, string, bool, etc.), return as is
+		return v, true
+	}
 }

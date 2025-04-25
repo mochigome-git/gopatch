@@ -25,7 +25,7 @@ func handleTrigger(
 	for _, tk := range triggerKeys {
 		switch {
 		case strings.Contains(tk.caseKey, "time.duration"):
-			handleTimeDurationCase(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
+			handleTimeDurationCase(tk, jsonPayloads, messages, loop)
 
 		case tk.caseKey == "standard":
 			handleStandardCase(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
@@ -62,7 +62,7 @@ func handleTrigger(
 
 // CASE 1, time.Duration; handling the process of time taken from 0 to 1, and record the total time duration
 func handleTimeDurationCase(tk TriggerKey, jsonPayloads *SafeJsonPayloads, messages []model.Message,
-	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+	loop float64) {
 
 	processKey := generateProcessKey(tk.triggerKey)
 
@@ -70,7 +70,7 @@ func handleTimeDurationCase(tk TriggerKey, jsonPayloads *SafeJsonPayloads, messa
 		processPrevTriggerKeyMap[processKey] = tk.triggerKey
 
 		if trigger, ok := jsonPayloads.GetFloat64(tk.triggerKey); ok && trigger != 0 {
-			handleTimeDurationTrigger(tk, jsonPayloads, messages, loop, filter, apiUrl, serviceRoleKey, function)
+			handleTimeDurationTrigger(tk, jsonPayloads, messages, loop)
 		}
 	}
 }

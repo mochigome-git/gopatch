@@ -2,8 +2,10 @@ package utils
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stretchr/testify/assert"
@@ -35,34 +37,28 @@ func (m *MockClient) Connect() mqtt.Token {
 }
 
 func TestMessageReceived(t *testing.T) {
-	// Test Data
-	testPayload := `{"address":"test_address","value":"test_value"}`
-	testMessage := &mockMessage{payload: []byte(testPayload)}
-
-	// Channel to capture JSON messages
 	receivedMessagesJSONChan := make(chan string, 1)
 
-	// Reset queue
 	ResetReceivedMessages()
 
-	// Call the messageReceived function
-	messageReceived(nil, testMessage, receivedMessagesJSONChan)
+	// Fill up the queue to trigger flush
+	for i := 0; i < MaxQueueSize; i++ {
+		payload := fmt.Sprintf(`{"address":"address_%d","value":"value_%d"}`, i, i)
+		testMessage := &mockMessage{payload: []byte(payload)}
+		messageReceived(testMessage, receivedMessagesJSONChan)
+	}
 
-	// Validate received messages
-	receivedMessagesMutex.Lock()
-	assert.Len(t, receivedMessages, 1, "Message queue should have one message")
-	assert.Equal(t, "test_address", receivedMessages[0].Address)
-	assert.Equal(t, "test_value", receivedMessages[0].Value)
-	receivedMessagesMutex.Unlock()
-
-	// Validate JSON output
+	// Wait for and validate JSON output
 	select {
 	case jsonOutput := <-receivedMessagesJSONChan:
 		var messages []MqttData
 		err := json.Unmarshal([]byte(jsonOutput), &messages)
 		assert.NoError(t, err, "JSON should unmarshal correctly")
-		assert.Len(t, messages, 1, "JSON should contain one message")
-	default:
+		assert.Len(t, messages, MaxQueueSize, fmt.Sprintf("JSON should contain %d messages", MaxQueueSize))
+		assert.Equal(t, "address_0", messages[0].Address)
+		assert.Equal(t, "value_0", messages[0].Value)
+		assert.Equal(t, fmt.Sprintf("address_%d", MaxQueueSize-1), messages[MaxQueueSize-1].Address)
+	case <-time.After(2 * time.Second):
 		t.Error("Expected JSON output but received none")
 	}
 }
