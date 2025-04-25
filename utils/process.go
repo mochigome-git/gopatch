@@ -86,7 +86,7 @@ func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []mode
 
 			return updatedMap
 		})
-	fmt.Println(processedPayloadsMap[key])
+	//fmt.Println(processedPayloadsMap[key])
 }
 
 // Process to check the time taken from 0 to 1; or CASE 1
@@ -115,9 +115,14 @@ func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads *SafeJsonPayloads, me
 func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
 	var wg sync.WaitGroup
 
+	// Declare previous weight values locally (initializing to 0 if nil)
+	var prevWeightValueCh1 *float64
+	var prevWeightValueCh2 *float64
+	var prevWeightValueCh3 *float64
+
 	// A helper function to process each weight trigger concurrently
 	processWeightTrigger := func(channel string, triggerKey string, weightTrigger *bool,
-		prevWeightTrigger *bool) {
+		prevWeightTrigger *bool, prevWeightValue *float64) {
 
 		defer wg.Done()
 
@@ -126,20 +131,36 @@ func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 			fmt.Printf("Trigger key %s not found", os.Getenv(triggerKey))
 			return
 		}
+
+		// Check for nil pointer before dereferencing
+		if prevWeightValue == nil {
+			// Initialize the pointer to 0 if it's nil
+			zero := float64(0)
+			prevWeightValue = &zero
+		}
+
 		switch v := triggerValue.(type) {
 		case string:
 			if v == "1" {
-				processAndPrint(channel, jsonPayloads, messages, loop)
-				*weightTrigger = true
-				*prevWeightTrigger = true
+				// Process weight only if it is greater than the previous value
+				if *prevWeightValue < float64(1) {
+					processAndPrint(channel, jsonPayloads, messages, loop)
+					*weightTrigger = true
+					*prevWeightTrigger = true
+					*prevWeightValue = float64(1)
+				}
 			} else {
 				*weightTrigger = false
 			}
 		case float64:
 			if v == 1 {
-				processAndPrint(channel, jsonPayloads, messages, loop)
-				*weightTrigger = true
-				*prevWeightTrigger = true
+				// Process weight only if it is greater than the previous value
+				if *prevWeightValue < v {
+					processAndPrint(channel, jsonPayloads, messages, loop)
+					*weightTrigger = true
+					*prevWeightTrigger = true
+					*prevWeightValue = v
+				}
 			} else {
 				*weightTrigger = false
 			}
@@ -150,9 +171,9 @@ func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 	wg.Add(3)
 
 	// Run each trigger processing in its own goroutine
-	go processWeightTrigger("weightch1_", "CASE_7_TRIGGER_WEIGHING_CH1", &weightTriggerCh1, &prevWeightTriggerCh1)
-	go processWeightTrigger("weightch2_", "CASE_7_TRIGGER_WEIGHING_CH2", &weightTriggerCh2, &prevWeightTriggerCh2)
-	go processWeightTrigger("weightch3_", "CASE_7_TRIGGER_WEIGHING_CH3", &weightTriggerCh3, &prevWeightTriggerCh3)
+	go processWeightTrigger("weightch1_", "CASE_7_TRIGGER_WEIGHING_CH1", &weightTriggerCh1, &prevWeightTriggerCh1, prevWeightValueCh1)
+	go processWeightTrigger("weightch2_", "CASE_7_TRIGGER_WEIGHING_CH2", &weightTriggerCh2, &prevWeightTriggerCh2, prevWeightValueCh2)
+	go processWeightTrigger("weightch3_", "CASE_7_TRIGGER_WEIGHING_CH3", &weightTriggerCh3, &prevWeightTriggerCh3, prevWeightValueCh3)
 
 	// Wait for all goroutines to finish
 	wg.Wait()

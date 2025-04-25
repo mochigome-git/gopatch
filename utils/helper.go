@@ -153,6 +153,12 @@ func parseTriggerKey(triggerKey string) []TriggerKey {
 	triggerKeySlice := strings.Split(triggerKey, ",")
 	var triggerkeys []TriggerKey
 
+	// Check if the number of items in the triggerKeySlice is even
+	if len(triggerKeySlice)%2 != 0 {
+		fmt.Println("Warning: Malformed triggerKey input. Ensure it contains pairs of trigger and case numbers.")
+		return triggerkeys // Return empty slice if the input is malformed
+	}
+
 	for i := 0; i < len(triggerKeySlice); i += 2 {
 		caseNumber := triggerKeySlice[i+1]
 
