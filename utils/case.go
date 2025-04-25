@@ -409,6 +409,9 @@ func handleWeight(jsonPayloads *SafeJsonPayloads, messages []model.Message, loop
 		prevWeightTriggerCh2 = false
 		prevWeightTriggerCh3 = false
 		chance = false
+		*prevWeightValueCh1 = 0
+		*prevWeightValueCh2 = 0
+		*prevWeightValueCh3 = 0
 	}
 }
 
@@ -487,6 +490,9 @@ func handleHoldFillingWeightCase(jsonPayloads *SafeJsonPayloads, messages []mode
 				prevWeightTriggerCh2 = false
 				prevWeightTriggerCh3 = false
 				prevDo = false
+				*prevWeightValueCh1 = 0
+				*prevWeightValueCh2 = 0
+				*prevWeightValueCh3 = 0
 			}
 
 		}

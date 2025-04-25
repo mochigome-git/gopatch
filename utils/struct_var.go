@@ -61,3 +61,7 @@ var weightTriggerCh1 bool
 var weightTriggerCh2 bool
 var weightTriggerCh3 bool
 var chance bool
+
+var prevWeightValueCh1 = new(float64)
+var prevWeightValueCh2 = new(float64)
+var prevWeightValueCh3 = new(float64)

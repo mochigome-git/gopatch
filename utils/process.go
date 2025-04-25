@@ -115,11 +115,6 @@ func handleTimeDurationTrigger(tk TriggerKey, jsonPayloads *SafeJsonPayloads, me
 func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
 	var wg sync.WaitGroup
 
-	// Declare previous weight values locally (initializing to 0 if nil)
-	var prevWeightValueCh1 *float64
-	var prevWeightValueCh2 *float64
-	var prevWeightValueCh3 *float64
-
 	// A helper function to process each weight trigger concurrently
 	processWeightTrigger := func(channel string, triggerKey string, weightTrigger *bool,
 		prevWeightTrigger *bool, prevWeightValue *float64) {
