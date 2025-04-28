@@ -21,11 +21,11 @@ func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *SafeJsonP
 	switch v := TRIGGER.(type) {
 	case string:
 		if v == "1" {
-			processAndPrint(prefix, jsonPayloads, messages, loop)
+			processAndPrint(prefix, jsonPayloads, messages, loop, nil)
 		}
 	case float64:
 		if v == 1 {
-			processAndPrint(prefix, jsonPayloads, messages, loop)
+			processAndPrint(prefix, jsonPayloads, messages, loop, nil)
 		}
 	}
 }
@@ -46,32 +46,31 @@ func processAndPrintforVacuum(key string, jsonPayloads *SafeJsonPayloads, messag
 // Helper function to compares and updates values in a nested map based on the provided keys.
 // It updates the map if the new value is larger than the existing one; for CASE 7 only
 func CompareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, parentKey string,
-	updateData map[string]interface{}, keysToCheck []string) {
+	updateData map[string]interface{}, keysToCheck []string, prevWeightValue *float64) {
 
-	// Access the nested map
 	nestedMap := parentMap[parentKey]
 	if nestedMap == nil {
-		return // Do nothing if no nested map exists for the parentKey
+		return
 	}
 
-	// Iterate over the keys to compare and update
 	for _, checkKey := range keysToCheck {
-		// Extract the new value from the update data
 		newValue, okNew := updateData[checkKey].(float64)
-		if !okNew {
-			continue // Skip if the value is not a float64
+		if !okNew || newValue == 0 {
+			continue
 		}
 
-		// Check if the key exists in the nested map
-		existingValue, exists := nestedMap[checkKey]
-		if exists {
-			// Safely type assert the existing value
-			existingFloat, okExisting := existingValue.(float64)
-			if okExisting && newValue > existingFloat {
-				nestedMap[checkKey] = newValue // Update if the new value is larger
+		if existingFloat, ok := nestedMap[checkKey].(float64); ok {
+			fmt.Println("Comparing:", newValue, existingFloat, *prevWeightValue)
+
+			if *prevWeightValue == 0 {
+				*prevWeightValue = existingFloat
 			}
-		} else {
-			nestedMap[checkKey] = newValue // Add key if it doesn't exist
+
+			if newValue > existingFloat && newValue >= *prevWeightValue {
+				fmt.Println("Updating value:", existingFloat, "->", newValue, "prevWeight:", *prevWeightValue)
+				nestedMap[checkKey] = newValue
+				*prevWeightValue = newValue
+			}
 		}
 	}
 }

@@ -71,7 +71,7 @@ func ProcessTriggerGeneric(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 
 // Procees to assigning the common logic to a function and then call that function inside each case
 // Handle the common logic for case string and float64; for CASE 4
-func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
+func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64, prevWeightValue *float64) {
 	processedPayloadsMu.Lock()
 	defer processedPayloadsMu.Unlock()
 
@@ -82,7 +82,7 @@ func processAndPrint(key string, jsonPayloads *SafeJsonPayloads, messages []mode
 
 			keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
 
-			CompareAndUpdateNestedMap(processedPayloadsMap, key, updatedMap, keysToCheck)
+			CompareAndUpdateNestedMap(processedPayloadsMap, key, updatedMap, keysToCheck, prevWeightValue)
 
 			return updatedMap
 		})
@@ -127,35 +127,22 @@ func ProcessWeightTriggers(jsonPayloads *SafeJsonPayloads, messages []model.Mess
 			return
 		}
 
-		// Check for nil pointer before dereferencing
-		if prevWeightValue == nil {
-			// Initialize the pointer to 0 if it's nil
-			zero := float64(0)
-			prevWeightValue = &zero
-		}
-
 		switch v := triggerValue.(type) {
 		case string:
 			if v == "1" {
-				// Process weight only if it is greater than the previous value
-				if *prevWeightValue < float64(1) {
-					processAndPrint(channel, jsonPayloads, messages, loop)
-					*weightTrigger = true
-					*prevWeightTrigger = true
-					*prevWeightValue = float64(1)
-				}
+				processAndPrint(channel, jsonPayloads, messages, loop, prevWeightValue)
+				*weightTrigger = true
+				*prevWeightTrigger = true
+
 			} else {
 				*weightTrigger = false
 			}
 		case float64:
 			if v == 1 {
-				// Process weight only if it is greater than the previous value
-				if *prevWeightValue < v {
-					processAndPrint(channel, jsonPayloads, messages, loop)
-					*weightTrigger = true
-					*prevWeightTrigger = true
-					*prevWeightValue = v
-				}
+				processAndPrint(channel, jsonPayloads, messages, loop, prevWeightValue)
+				*weightTrigger = true
+				*prevWeightTrigger = true
+
 			} else {
 				*weightTrigger = false
 			}
