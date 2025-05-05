@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"gopatch/config"
 	"gopatch/model"
 	"gopatch/patch"
 	"gopatch/utils"
@@ -31,8 +32,7 @@ func handleTimeDurationCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPay
 }
 
 // CASE 2, Standard; handling a devices value and patch it, when the trigger is different with previous key
-func handleStandardCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	loop float64, apiUrl string, serviceRoleKey string, function string) {
+func handleStandardCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, cfg config.AppConfig) {
 
 	processKey := generateProcessKey(tk.TriggerKey)
 
@@ -41,7 +41,7 @@ func handleStandardCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayload
 
 		if trigger, ok := jsonPayloads.GetFloat64(tk.TriggerKey); ok && trigger != 0 {
 			var startTime time.Time
-			processMessagesLoop(jsonPayloads, messages, startTime, loop)
+			processMessagesLoop(jsonPayloads, messages, startTime, cfg.Loop)
 
 			utils.CalculateAndStoreInklot(jsonPayloads)
 			utils.ChangeName(jsonPayloads)
@@ -56,7 +56,7 @@ func handleStandardCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayload
 					return
 				}
 
-				_, err = patch.SendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+				_, err = patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function)
 				if err != nil {
 					panic(err)
 				}

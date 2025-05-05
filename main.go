@@ -54,9 +54,7 @@ func main() {
 				return
 			default:
 				handler.ProcessMQTTData(
-					config.APIUrl, config.ServiceRoleKey, receivedMessagesJSONChan,
-					config.Function, config.Trigger, config.Loop, config.Filter,
-				)
+					config.GetAppConfig(), receivedMessagesJSONChan)
 			}
 		}
 	}()

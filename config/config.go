@@ -49,6 +49,28 @@ func GetMqttConfig() MqttConfig {
 	}
 }
 
+type AppConfig struct {
+	APIUrl         string
+	ServiceRoleKey string
+	Function       string
+	Trigger        string
+	LoopStr        string
+	Loop           float64
+	Filter         string
+}
+
+func GetAppConfig() AppConfig {
+	return AppConfig{
+		APIUrl:         APIUrl,
+		ServiceRoleKey: ServiceRoleKey,
+		Function:       Function,
+		Trigger:        Trigger,
+		LoopStr:        LoopStr,
+		Loop:           Loop,
+		Filter:         Filter,
+	}
+}
+
 // Load initializes all configuration variables from environment variables
 func Load(files ...string) {
 	// Try to load from the specified file first

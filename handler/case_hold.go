@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"gopatch/config"
 	"gopatch/model"
 	"gopatch/patch"
 	"gopatch/utils"
@@ -16,14 +17,14 @@ import (
 
 // CASE 3, Trigger; handling the device when triggered and hold for 4second to collect data to patch.
 func handleTriggerCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	loop float64, filter string, apiUrl string, serviceRoleKey string, function string) {
+	cfg config.AppConfig) {
 
 	if value, ok := jsonPayloads.GetFloat64(tk.TriggerKey); ok && value == 1 {
 
 		startTime := time.Now()
-		processMessagesLoop(jsonPayloads, messages, startTime, loop)
+		processMessagesLoop(jsonPayloads, messages, startTime, cfg.Loop)
 
-		if _filter, ok := jsonPayloads.GetFloat64(filter); ok && _filter != 0 {
+		if _filter, ok := jsonPayloads.GetFloat64(cfg.Filter); ok && _filter != 0 {
 			utils.CalculateAndStoreInklot(jsonPayloads)
 			utils.ChangeName(jsonPayloads)
 
@@ -33,7 +34,7 @@ func handleTriggerCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads
 				return
 			}
 
-			_, err = patch.SendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+			_, err = patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function)
 			if err != nil {
 				panic(err)
 			}
@@ -46,7 +47,7 @@ func handleTriggerCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads
 
 // CASE 4, Hold; hold the data and wait until patch trigger
 func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	apiUrl string, serviceRoleKey string, function string, checkAccumulateRate AccumCheckFunc) {
+	cfg config.AppConfig, checkAccumulateRate AccumCheckFunc) {
 
 	if checkAccumulateRate() {
 		return
@@ -92,7 +93,7 @@ func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, mess
 				return
 			}
 
-			_, err = patch.SendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+			_, err = patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function)
 			if err != nil {
 				panic(err)
 			}
@@ -107,7 +108,7 @@ func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, mess
 
 // CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
 func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	apiUrl string, serviceRoleKey string, function string) {
+	cfg config.AppConfig) {
 
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
 
@@ -151,7 +152,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 			keys := []string{
 				"ch1", "ch2", "ch3", "do",
 			}
-			processPatch(session, keys, apiUrl, serviceRoleKey, function, func() { prevDo = false })
+			processPatch(session, keys, cfg, func() { prevDo = false })
 		}
 
 	}
@@ -160,7 +161,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 
 // CASE 7, Weight; hold the data and wait until weighing scale trigger to collect data to patch.
 func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	apiUrl string, serviceRoleKey string, function string, chance bool, checkAccumulateRate AccumCheckFunc) {
+	cfg config.AppConfig, chance bool, checkAccumulateRate AccumCheckFunc) {
 
 	if checkAccumulateRate() {
 		chance = true
@@ -189,14 +190,14 @@ func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messag
 		keys := []string{
 			"ch1_", "ch2_", "ch3_", "vacuum", "weightch1_", "weightch2_", "weightch3_", "counterch_",
 		}
-		processPatch(session, keys, apiUrl, serviceRoleKey, function, func() { session.IsProcessing = false })
+		processPatch(session, keys, cfg, func() { session.IsProcessing = false })
 	}
 
 }
 
 // CASE 8, HoldFillingWeight; hold the data and wait until weighing scale trigger to collect data to patch.
 func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	apiUrl string, serviceRoleKey string, function string) {
+	cfg config.AppConfig) {
 
 	for _, channel := range []string{"ch1", "ch2", "ch3"} {
 		// Retrieve NUMBERofSTATE from environment variable and convert to float64
@@ -240,7 +241,7 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 			keys := []string{
 				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_",
 			}
-			processPatch(session, keys, apiUrl, serviceRoleKey, function, func() { prevDo = false })
+			processPatch(session, keys, cfg, func() { prevDo = false })
 		}
 
 	}
@@ -268,7 +269,7 @@ func resetWeightTriggers(session *Session) {
 	*session.PrevWeightValueCh3 = 0
 }
 
-func processPatch(session *Session, keys []string, apiUrl, serviceRoleKey, function string, after func()) {
+func processPatch(session *Session, keys []string, cfg config.AppConfig, after func()) {
 	fmt.Println("All weight triggers are now inactive. Processing the patch.")
 
 	parts := []map[string]interface{}{}
@@ -284,7 +285,7 @@ func processPatch(session *Session, keys []string, apiUrl, serviceRoleKey, funct
 		return
 	}
 
-	if _, err := patch.SendPatchRequest(apiUrl, serviceRoleKey, jsonData, function); err != nil {
+	if _, err := patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function); err != nil {
 		log.Fatal("Error sending patch request:", err)
 	}
 

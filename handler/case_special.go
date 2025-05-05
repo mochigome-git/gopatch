@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"gopatch/config"
 	"gopatch/model"
 	"gopatch/patch"
 	"gopatch/utils"
@@ -11,7 +12,7 @@ import (
 
 // CASE 5, Special; handling a device's highest value and average value and patch it, when the trigger is 1
 func handleSpecialCase(session *Session, tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	apiUrl string, serviceRoleKey string, function string) {
+	cfg config.AppConfig) {
 	// Assuming these variables need to be declared and initialized
 	var startTime time.Time
 
@@ -74,7 +75,7 @@ func handleSpecialCase(session *Session, tk utils.TriggerKey, jsonPayloads *util
 				return
 			}
 
-			_, err = patch.SendPatchRequest(apiUrl, serviceRoleKey, jsonData, function)
+			_, err = patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function)
 			if err != nil {
 				panic(err)
 			}

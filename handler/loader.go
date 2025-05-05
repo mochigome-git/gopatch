@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"gopatch/config"
 	"gopatch/model"
 	"gopatch/utils"
 	"log"
@@ -15,17 +16,12 @@ import (
 var stopProcessing = make(chan struct{})
 
 func ProcessMQTTData(
-	apiUrl string,
-	serviceRoleKey string,
+	cfg config.AppConfig,
 	receivedMessagesJSONChan <-chan string,
-	function string,
-	trigger string,
-	loop float64,
-	filter string,
 ) {
 	// Create a persistent session once
 	// Use unique key per logical case
-	caseKey := function + "_" + trigger
+	caseKey := cfg.Function + "_" + cfg.Trigger
 	session := GetOrCreateSession(caseKey)
 
 	// Create a map to store all JSON payloads
@@ -56,7 +52,7 @@ func ProcessMQTTData(
 			// Start to collect data when trigger specify device
 			// collect the data for few seconds, process for further handling method.
 			// Change Payloads title or delete the extra devices and etc..
-			Trigger(session, jsonPayloads, messages, trigger, loop, filter, apiUrl, serviceRoleKey, function)
+			Trigger(session, jsonPayloads, messages, cfg)
 			jsonPayloads.Clear()
 
 			return
