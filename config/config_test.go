@@ -1,4 +1,4 @@
-package utils
+package config
 
 import (
 	"os"
@@ -18,7 +18,7 @@ func TestLoadEnv(t *testing.T) {
 	defer os.Remove(fileName) // Clean up after test
 
 	// Load the test env file
-	LoadEnv(fileName)
+	Load(fileName)
 
 	// Check the loaded value
 	value := os.Getenv("TEST_ENV_KEY")

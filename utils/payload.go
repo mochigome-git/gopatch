@@ -2,6 +2,8 @@ package utils
 
 import "sync"
 
+type JsonPayloads map[string]interface{}
+
 type SafeJsonPayloads struct {
 	mu   sync.RWMutex
 	data JsonPayloads
@@ -30,6 +32,14 @@ func (s *SafeJsonPayloads) Delete(key string) {
 	s.mu.Lock() // Lock for writing
 	defer s.mu.Unlock()
 	delete(s.data, key)
+}
+
+func (s *SafeJsonPayloads) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.data {
+		delete(s.data, k)
+	}
 }
 
 func (s *SafeJsonPayloads) GetFloat64(key string) (float64, bool) {

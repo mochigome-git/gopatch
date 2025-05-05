@@ -1,4 +1,4 @@
-package utils
+package patch
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func sendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, function string) ([]byte, error) {
+func SendPatchRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, function string) ([]byte, error) {
 	// Create a PATCH request
 	req, err := http.NewRequest(function, apiUrl, bytes.NewBuffer(jsonPayload))
 	if err != nil {

@@ -1,4 +1,4 @@
-package utils
+package patch
 
 import (
 	"encoding/json"
@@ -51,7 +51,7 @@ func TestSendPatchRequest(t *testing.T) {
 			defer server.Close()
 
 			jsonPayload := []byte(`{"key":"value"}`)
-			body, err := sendPatchRequest(server.URL, "dummy-key", jsonPayload, "PATCH")
+			body, err := SendPatchRequest(server.URL, "dummy-key", jsonPayload, "PATCH")
 
 			if (err != nil) != tt.expectError {
 				t.Fatalf("Expected error: %v, got: %v", tt.expectError, err)

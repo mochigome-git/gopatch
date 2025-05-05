@@ -1,16 +1,19 @@
-package utils
+package mqtts
 
 import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"gopatch/config"
 	"log"
 	"os"
 	"os/signal"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
@@ -24,11 +27,14 @@ type MqttData struct {
 var (
 	receivedMessages      []MqttData
 	receivedMessagesMutex sync.Mutex
-	mqttData              MqttData
+	droppedMessagesCount  int64
 )
 
-// Define the size of the fixed size queue
-const MaxQueueSize = 200
+const (
+	MinFlushSize  = 100             // Only flush if at least 100 messages
+	MaxQueueSize  = 200             // Optional: maximum buffer size
+	FlushInterval = 1 * time.Second // Force flush every second
+)
 
 func getClientOptions(broker, port string) *mqtt.ClientOptions {
 	opts := mqtt.NewClientOptions()
@@ -74,93 +80,122 @@ func ECSgetClientOptionsTLS(broker, port, ECScaCert, ECSclientCert, ECSclientKey
 	return opts, nil
 }
 
-func Client(broker, port, topic, mqttsStr, ECScaCert, ECSclientCert, ECSclientKey string, receivedMessagesJSONChan chan<- string, clientDone chan<- struct{}) {
+func Client(cfg config.MqttConfig, receivedMessagesJSONChan chan<- string, clientDone chan<- struct{}) {
 	// Parse the string value into a boolean, defaulting to false if parsing fails
-	mqtts, _ := strconv.ParseBool(mqttsStr)
+	mqtts, _ := strconv.ParseBool(cfg.MQTTSStr)
 	var opts *mqtt.ClientOptions
-
 	if mqtts {
 		var err error
 		// Standard verion
 		//opts, err = getClientOptionsTLS(broker, port, caCertFile, clientCertFile, clientKeyFile)
+
 		// AWS ECS version
-		opts, err = ECSgetClientOptionsTLS(broker, port, ECScaCert, ECSclientCert, ECSclientKey)
+		opts, err = ECSgetClientOptionsTLS(cfg.Broker, cfg.Port, cfg.ECScaCert, cfg.ECSclientCert, cfg.ECSclientKey)
 		if err != nil {
 			log.Fatalf("Error requesting MQTT TLS configuration: %v", err.Error())
 			return
 		}
 	} else {
-		opts = getClientOptions(broker, port)
+		opts = getClientOptions(cfg.Broker, cfg.Port)
 	}
 	client := mqtt.NewClient(opts)
 
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Fatalf("Error connecting to MQTT broker: %v", token.Error())
-		return
+	maxAttempts := 5
+	for i := 1; i <= maxAttempts; i++ {
+		if token := client.Connect(); token.Wait() && token.Error() == nil {
+			break
+		} else {
+			log.Printf("MQTT connect failed (attempt %d/%d): %v", i, maxAttempts, token.Error())
+			time.Sleep(2 * time.Second)
+			if i == maxAttempts {
+				log.Fatalf("MQTT connect failed after %d attempts", maxAttempts)
+			}
+		}
 	}
 
-	if token := client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
-		messageReceived(msg, receivedMessagesJSONChan)
+	if token := client.Subscribe(cfg.Topic, 0, func(client mqtt.Client, msg mqtt.Message) {
+		messageReceived(msg)
 	}); token.Wait() && token.Error() != nil {
 		log.Fatalf("Error subscribing to topic: %v", token.Error())
 		return
 	}
 
-	log.Printf("Subscribed to topic: %s\n", topic)
+	log.Printf("Subscribed to topic: %s\n", cfg.Topic)
+
+	// Start background batch flusher
+	stopFlusher := make(chan struct{})
+	go startBatchFlusher(receivedMessagesJSONChan, stopFlusher)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	client.Unsubscribe(topic)
+	// Graceful shutdown
+	close(stopFlusher)
+	client.Unsubscribe(cfg.Topic)
 	client.Disconnect(250)
-
 	close(clientDone)
+	log.Println("MQTT client shut down gracefully.")
 }
 
 // messageReceived handles the received MQTT message
-func messageReceived(msg mqtt.Message, receivedMessagesJSONChan chan<- string) {
-	// Unmarshal the received MQTT message payload into mqttData
+func messageReceived(msg mqtt.Message) {
+	var mqttData MqttData
 	if err := json.Unmarshal(msg.Payload(), &mqttData); err != nil {
 		log.Printf("Error parsing JSON: %v\n", err)
 		return
 	}
 
-	// Lock the mutex to synchronize access to the message queue
+	receivedMessagesMutex.Lock()
+	receivedMessages = append(receivedMessages, mqttData)
+	receivedMessagesMutex.Unlock()
+}
+
+func startBatchFlusher(receivedMessagesJSONChan chan<- string, stopFlusher <-chan struct{}) {
+	ticker := time.NewTicker(FlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			flushMessages(receivedMessagesJSONChan, true) // Forced flush by timer
+		case <-stopFlusher:
+			flushMessages(receivedMessagesJSONChan, true) // Final flush
+			return
+		default:
+			time.Sleep(50 * time.Millisecond)
+			flushMessages(receivedMessagesJSONChan, false) // Soft flush
+		}
+	}
+}
+
+func flushMessages(receivedMessagesJSONChan chan<- string, force bool) {
 	receivedMessagesMutex.Lock()
 	defer receivedMessagesMutex.Unlock()
 
-	// Append the newly received message to the message queue
-	receivedMessages = append(receivedMessages, mqttData)
-
-	// If the queue reaches MaxQueueSize, reset and send the messages
-	if len(receivedMessages) >= MaxQueueSize {
-		//log.Println("Queue is full, resetting and sending messages")
-		resetAndSendMessages(receivedMessagesJSONChan)
-	}
-
-}
-
-// resetAndSendMessages marshals the received messages, sends them to the processing channel,
-// and resets the receivedMessages queue
-func resetAndSendMessages(receivedMessagesJSONChan chan<- string) {
-	// Marshal the received messages into JSON
-	jsonData, err := json.Marshal(receivedMessages)
-	if err != nil {
-		log.Printf("Error marshaling JSON: %v\n", err)
+	queueLen := len(receivedMessages)
+	if queueLen == 0 {
 		return
 	}
 
-	select {
-	case receivedMessagesJSONChan <- string(jsonData):
-		// Successfully sent JSON data to the processing channel
-	default:
-		// Processing channel is full, drop the message or handle accordingly
-		//log.Println("Received data dropped, channel full")
-	}
+	// Only flush if queue is big enough OR if forced flush
+	if queueLen >= MinFlushSize || force {
+		messagesToSend := receivedMessages
+		receivedMessages = nil
 
-	// Reset the receivedMessages queue
-	receivedMessages = nil
+		jsonData, err := json.Marshal(messagesToSend)
+		if err != nil {
+			log.Printf("Error marshaling JSON: %v\n", err)
+			return
+		}
+
+		select {
+		case receivedMessagesJSONChan <- string(jsonData):
+		default:
+			atomic.AddInt64(&droppedMessagesCount, 1)
+			log.Println("Received data dropped, channel full")
+		}
+	}
 }
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
@@ -172,6 +207,7 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 }
 
 func ResetReceivedMessages() {
-	// Reset the receivedMessages slice to contain only mqttData
+	receivedMessagesMutex.Lock()
 	receivedMessages = []MqttData{}
+	receivedMessagesMutex.Unlock()
 }

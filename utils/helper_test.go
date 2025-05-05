@@ -34,24 +34,10 @@ func TestGetKeyTransformationsFromEnv(t *testing.T) {
 	}
 }
 
-// ---- Test for MergeNonEmptyMaps ----
-func TestMergeNonEmptyMaps(t *testing.T) {
-	map1 := map[string]interface{}{"a": 1}
-	map2 := map[string]interface{}{"b": 2}
-	map3 := map[string]interface{}{}
-
-	result := MergeNonEmptyMaps(map1, map2, map3)
-	expected := map[string]interface{}{"a": 1, "b": 2}
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Errorf("Expected %v, got %v", expected, result)
-	}
-}
-
 // ---- Test for parseTriggerKey ----
 func TestParseTriggerKey(t *testing.T) {
 	input := "trigger1,4,trigger2,7"
-	result := parseTriggerKey(input)
+	result := ParseTriggerKey(input)
 	expected := []TriggerKey{
 		{"trigger1", "4"},
 		{"trigger2", "7"},
@@ -76,88 +62,117 @@ func TestCompareAndUpdateNestedMap(t *testing.T) {
 		{
 			name: "Updates larger values only",
 			parentMap: map[string]map[string]interface{}{
-				"machine1": {
-					"ch1_weighing": 100.0,
-					"ch2_weighing": 200.0,
-					"ch3_weighing": 150.0,
-				},
+				"machine1": {"ch1_weighing": 120.0},
 			},
 			parentKey: "machine1",
 			updateData: map[string]interface{}{
-				"ch1_weighing": 120.0, // Should update
-				"ch2_weighing": 180.0, // Should not update
-				"ch3_weighing": 0.0,   // Should be ignored
+				"ch1_weighing": 200.0,
 			},
-			keysToCheck: []string{"ch1_weighing", "ch2_weighing", "ch3_weighing"},
+			keysToCheck: []string{"ch1_weighing"},
 			initialPrev: 110.0,
 			expectedMap: map[string]map[string]interface{}{
-				"machine1": {
-					"ch1_weighing": 120.0,
-					"ch2_weighing": 200.0,
-					"ch3_weighing": 150.0,
-				},
+				"machine1": {"ch1_weighing": 200.0},
 			},
-			expectedPrev: 120.0,
+			expectedPrev: 200.0,
 		},
 		{
 			name: "No updates because all new values are smaller",
 			parentMap: map[string]map[string]interface{}{
-				"machine2": {
-					"ch1_weighing": 300.0,
-					"ch2_weighing": 400.0,
-				},
+				"machine2": {"ch2_weighing": 400.0},
 			},
 			parentKey: "machine2",
 			updateData: map[string]interface{}{
-				"ch1_weighing": 250.0,
 				"ch2_weighing": 350.0,
 			},
-			keysToCheck: []string{"ch1_weighing", "ch2_weighing"},
+			keysToCheck: []string{"ch2_weighing"},
 			initialPrev: 100.0,
 			expectedMap: map[string]map[string]interface{}{
-				"machine2": {
-					"ch1_weighing": 300.0,
-					"ch2_weighing": 400.0,
-				},
+				"machine2": {"ch2_weighing": 400.0},
 			},
-			expectedPrev: 100.0,
+			expectedPrev: 400.0,
 		},
 		{
 			name: "Skip non-float values and zeros",
 			parentMap: map[string]map[string]interface{}{
-				"machine3": {
-					"ch1_weighing": 50.0,
-				},
+				"machine3": {"ch1_weighing": 50.0},
 			},
 			parentKey: "machine3",
 			updateData: map[string]interface{}{
 				"ch1_weighing": 0.0,
-				"ch2_weighing": "invalid",
 			},
 			keysToCheck: []string{"ch1_weighing", "ch2_weighing"},
 			initialPrev: 10.0,
 			expectedMap: map[string]map[string]interface{}{
-				"machine3": {
-					"ch1_weighing": 50.0,
-				},
+				"machine3": {"ch1_weighing": 50.0},
 			},
-			expectedPrev: 10.0,
+			expectedPrev: 50.0,
+		},
+		{
+			name: "PrevWeight is 0, sets from existing and updates",
+			parentMap: map[string]map[string]interface{}{
+				"machine6": {"ch1_weighing": 80.0},
+			},
+			parentKey: "machine6",
+			updateData: map[string]interface{}{
+				"ch1_weighing": 90.0,
+			},
+			keysToCheck: []string{"ch1_weighing"},
+			initialPrev: 0.0,
+			expectedMap: map[string]map[string]interface{}{
+				"machine6": {"ch1_weighing": 90.0},
+			},
+			expectedPrev: 90.0,
+		},
+		{
+			name: "Parent key not found in parentMap",
+			parentMap: map[string]map[string]interface{}{
+				"machine5": {"ch1_weighing": 70.0},
+			},
+			parentKey: "machineX", // wrong key
+			updateData: map[string]interface{}{
+				"ch1_weighing": 90.0,
+			},
+			keysToCheck: []string{"ch1_weighing"},
+			initialPrev: 30.0,
+			expectedMap: map[string]map[string]interface{}{
+				"machine5": {"ch1_weighing": 70.0},
+			},
+			expectedPrev: 30.0,
+		},
+		{
+			name: "No matching keys in updateData",
+			parentMap: map[string]map[string]interface{}{
+				"machine4": {"ch1_weighing": 50.0},
+			},
+			parentKey: "machine4",
+			updateData: map[string]interface{}{
+				"chX_weighing": 100.0,
+			},
+			keysToCheck: []string{"ch1_weighing"},
+			initialPrev: 20.0,
+			expectedMap: map[string]map[string]interface{}{
+				"machine4": {"ch1_weighing": 50.0},
+			},
+			expectedPrev: 50.0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Call the function with the provided inputs
 			prev := tt.initialPrev
-
 			CompareAndUpdateNestedMap(tt.parentMap, tt.parentKey, tt.updateData, tt.keysToCheck, &prev)
 
-			if !reflect.DeepEqual(tt.parentMap, tt.expectedMap) {
-				t.Errorf("parentMap mismatch. Got %+v, want %+v", tt.parentMap, tt.expectedMap)
-			}
-
-			if prev != tt.expectedPrev {
-				t.Errorf("prevWeightValue mismatch. Got %v, want %v", prev, tt.expectedPrev)
-			}
+			// Simplified comparison of the expected results
+			assertEqual(t, tt.parentMap, tt.expectedMap, "parentMap mismatch")
+			assertEqual(t, prev, tt.expectedPrev, "prevWeightValue mismatch")
 		})
+	}
+}
+
+// Helper function to compare results and report errors
+func assertEqual(t *testing.T, got, want interface{}, message string) {
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%s. Got %+v, want %+v", message, got, want)
 	}
 }

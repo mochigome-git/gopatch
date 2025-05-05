@@ -4,31 +4,14 @@ import (
 	//"log"
 	//"net/http"
 	//_ "net/http/pprof"
+
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
-	"gopatch/utils"
-)
-
-// Application-wide configuration variables
-var (
-	apiUrl         string  // URL for the API endpoint
-	serviceRoleKey string  // Key to identify the service role
-	function       string  // Name of the function to invoke for processing
-	trigger        string  // Trigger identifier for the device or operation
-	loopStr        string  // Looping parameter in string format
-	loop           float64 // Looping parameter converted to float64
-	filter         string  // Filter for processing MQTT messages
-
-	broker        string // MQTT broker hostname
-	port          string // MQTT broker port
-	topic         string // MQTT topic to subscribe to
-	mqttsStr      string // Indicates if MQTT Secure (MQTTS) is enabled ("true"/"false")
-	ECScaCert     string // ESC verion direct read from params store
-	ECSclientCert string // ESC verion direct read from params store
-	ECSclientKey  string // ESC verion direct read from params store
+	"gopatch/config"
+	"gopatch/handler"
+	"gopatch/mqtts"
 )
 
 func main() {
@@ -46,17 +29,20 @@ func main() {
 	//	}
 	//}()
 
+	// Load configuration
+	config.Load(".env.local")
+
 	// Channels for communication and termination
 	stopProcessing := make(chan struct{})
 	clientDone := make(chan struct{})
 	// Channel for receiving MQTT messages as JSON strings
-	receivedMessagesJSONChan := make(chan string)
+	receivedMessagesJSONChan := make(chan string, 1000)
 
 	// Start the MQTT client in a separate goroutine
-	go utils.Client(
-		broker, port, topic, mqttsStr,
-		ECScaCert, ECSclientCert, ECSclientKey,
-		receivedMessagesJSONChan, clientDone,
+	go mqtts.Client(
+		config.GetMqttConfig(),
+		receivedMessagesJSONChan,
+		clientDone,
 	)
 
 	// Process MQTT data
@@ -67,9 +53,9 @@ func main() {
 			case <-stopProcessing:
 				return
 			default:
-				utils.ProcessMQTTData(
-					apiUrl, serviceRoleKey, receivedMessagesJSONChan,
-					function, trigger, loop, filter,
+				handler.ProcessMQTTData(
+					config.APIUrl, config.ServiceRoleKey, receivedMessagesJSONChan,
+					config.Function, config.Trigger, config.Loop, config.Filter,
 				)
 			}
 		}
@@ -85,30 +71,4 @@ func main() {
 
 	// Wait for client to finish
 	<-clientDone
-}
-
-// init initializes application configuration by loading environment variables.
-func init() {
-	// Load configuration (for local testing)
-	utils.LoadEnv(".env.local")
-
-	// Initialize application variable
-	apiUrl = os.Getenv("API_URL")
-	serviceRoleKey = os.Getenv("SERVICE_ROLE_KEY")
-	function = os.Getenv("BASH_API")
-	trigger = os.Getenv("TRIGGER_DEVICE")
-	loopStr = os.Getenv("LOOPING")
-	loop, _ = strconv.ParseFloat(loopStr, 64)
-	filter = os.Getenv("FILTER")
-
-	// MQTT configuration
-	broker = os.Getenv("MQTT_HOST")
-	port = os.Getenv("MQTT_PORT")
-	topic = os.Getenv("MQTT_TOPIC")
-	mqttsStr = os.Getenv("MQTTS_ON")
-
-	// MQTT security certificates
-	ECScaCert = os.Getenv("ECS_MQTT_CA_CERTIFICATE")
-	ECSclientCert = os.Getenv("ECS_MQTT_CLIENT_CERTIFICATE")
-	ECSclientKey = os.Getenv("ECS_MQTT_PRIVATE_KEY")
 }

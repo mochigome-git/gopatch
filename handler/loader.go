@@ -1,13 +1,18 @@
-package utils
+package handler
 
 import (
 	"encoding/json"
 	"fmt"
+
 	"gopatch/model"
+	"gopatch/utils"
 	"log"
 	"strings"
 	"time"
 )
+
+// Time process to handling data
+var stopProcessing = make(chan struct{})
 
 func ProcessMQTTData(
 	apiUrl string,
@@ -18,8 +23,13 @@ func ProcessMQTTData(
 	loop float64,
 	filter string,
 ) {
+	// Create a persistent session once
+	// Use unique key per logical case
+	caseKey := function + "_" + trigger
+	session := GetOrCreateSession(caseKey)
+
 	// Create a map to store all JSON payloads
-	jsonPayloads := NewSafeJsonPayloads()
+	jsonPayloads := utils.NewSafeJsonPayloads()
 	for {
 		select {
 		case jsonString := <-receivedMessagesJSONChan:
@@ -46,9 +56,9 @@ func ProcessMQTTData(
 			// Start to collect data when trigger specify device
 			// collect the data for few seconds, process for further handling method.
 			// Change Payloads title or delete the extra devices and etc..
-			handleTrigger(jsonPayloads, messages, trigger, loop, filter, apiUrl, serviceRoleKey, function)
+			Trigger(session, jsonPayloads, messages, trigger, loop, filter, apiUrl, serviceRoleKey, function)
+			jsonPayloads.Clear()
 
-			clearCacheAndData(jsonPayloads)
 			return
 
 		case <-stopProcessing:
@@ -77,7 +87,7 @@ func prettyPrintJSONWithTime(data interface{}, duration time.Duration) {
 	case map[string]interface{}:
 		// Handle normal map[string]interface{} directly
 		formatted, err = json.MarshalIndent(v, "", "  ")
-	case *SafeJsonPayloads:
+	case *utils.SafeJsonPayloads:
 		// Handle *SafeJsonPayloads, extracting the map from it
 		formatted, err = json.MarshalIndent(v.GetData(), "", "  ")
 	default:

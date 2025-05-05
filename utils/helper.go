@@ -2,46 +2,9 @@ package utils
 
 import (
 	"fmt"
-	"gopatch/model"
-	"log"
 	"os"
 	"strings"
 )
-
-// Helper function to process the trigger for each channel;
-// for CASE 4 and CASE 7
-func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *SafeJsonPayloads,
-	messages []model.Message, loop float64) {
-
-	TRIGGER, ok := jsonPayloads.Get(os.Getenv(triggerEnvVar))
-	if !ok {
-		log.Printf("Trigger key %s not found", os.Getenv(triggerEnvVar))
-		return
-	}
-	switch v := TRIGGER.(type) {
-	case string:
-		if v == "1" {
-			processAndPrint(prefix, jsonPayloads, messages, loop, nil)
-		}
-	case float64:
-		if v == 1 {
-			processAndPrint(prefix, jsonPayloads, messages, loop, nil)
-		}
-	}
-}
-
-// Helper function for assigning the common logic
-// to a function and then call that function inside each case
-// Handle the common logic for case if not nil;
-// for CASE 4 & CASE 7.
-func processAndPrintforVacuum(key string, jsonPayloads *SafeJsonPayloads, messages []model.Message, loop float64) {
-	processedPayloadsMap[key] = ProcessTriggerGeneric(jsonPayloads, messages, loop,
-		func(payload *SafeJsonPayloads) map[string]interface{} {
-
-			return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
-		})
-	//fmt.Println(processedPayloadsMap[key])
-}
 
 // Helper function to compares and updates values in a nested map based on the provided keys.
 // It updates the map if the new value is larger than the existing one; for CASE 7 only
@@ -54,23 +17,30 @@ func CompareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, pare
 	}
 
 	for _, checkKey := range keysToCheck {
+		// Retrieve the existing value from the nested map and check if it's a float64
+		// If the existing value is greater than the previous weight value, update it
+		existingFloat, okExist := nestedMap[checkKey].(float64)
+		if okExist && existingFloat > *prevWeightValue {
+			*prevWeightValue = existingFloat
+		}
+
+		// Retrieve the new value from the updateData and validate it (must be a non-zero float64)
 		newValue, okNew := updateData[checkKey].(float64)
 		if !okNew || newValue == 0 {
 			continue
 		}
 
-		if existingFloat, ok := nestedMap[checkKey].(float64); ok {
-			fmt.Println("Comparing:", newValue, existingFloat, *prevWeightValue)
+		fmt.Println("Comparing:", checkKey, newValue, existingFloat, *prevWeightValue)
 
-			if *prevWeightValue == 0 {
-				*prevWeightValue = existingFloat
-			}
+		if !okExist {
+			continue
+		}
 
-			if newValue > existingFloat && newValue >= *prevWeightValue {
-				fmt.Println("Updating value:", existingFloat, "->", newValue, "prevWeight:", *prevWeightValue)
-				nestedMap[checkKey] = newValue
-				*prevWeightValue = newValue
-			}
+		// If the new value is greater than the existing one and greater than or equal to the previous weight
+		if newValue > existingFloat && newValue >= *prevWeightValue {
+			fmt.Println("Updating value:", checkKey, existingFloat, "->", newValue, "prevWeight:", *prevWeightValue)
+			nestedMap[checkKey] = newValue
+			*prevWeightValue = newValue
 		}
 	}
 }
@@ -131,24 +101,14 @@ func GetKeyTransformationsFromEnv(prefix string) map[string]string {
 	return keyTransformations
 }
 
-// Helper Function to merges non-empty maps and returns a new map.
-func MergeNonEmptyMaps(maps ...map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	for _, m := range maps {
-		if len(m) > 0 {
-			for key, value := range m {
-				result[key] = value
-			}
-		}
-	}
-
-	return result
+type TriggerKey struct {
+	TriggerKey string
+	CaseKey    string
 }
 
 // Helper Function splits a string of trigger keys and case numbers,
 // returning a slice of TriggerKey structs.
-func parseTriggerKey(triggerKey string) []TriggerKey {
+func ParseTriggerKey(triggerKey string) []TriggerKey {
 	triggerKeySlice := strings.Split(triggerKey, ",")
 	var triggerkeys []TriggerKey
 
@@ -162,8 +122,8 @@ func parseTriggerKey(triggerKey string) []TriggerKey {
 		caseNumber := triggerKeySlice[i+1]
 
 		triggerkeys = append(triggerkeys, TriggerKey{
-			triggerKey: triggerKeySlice[i],
-			caseKey:    fmt.Sprint(caseNumber),
+			TriggerKey: triggerKeySlice[i],
+			CaseKey:    fmt.Sprint(caseNumber),
 		})
 	}
 
@@ -171,7 +131,7 @@ func parseTriggerKey(triggerKey string) []TriggerKey {
 }
 
 // Helper Function replaces device names in the JSON payload with readable keys.
-func changeName(jsonPayloads *SafeJsonPayloads) {
+func ChangeName(jsonPayloads *SafeJsonPayloads) {
 	// Define a mapping of key transformations
 	keyTransformations := GetKeyTransformationsFromEnv("KEY_TRANSFORMATION_")
 
@@ -197,7 +157,7 @@ func changeName(jsonPayloads *SafeJsonPayloads) {
 }
 
 // Helper Function to computes and stores an 'ink_lot' value based on specific keys in the JSON payload.
-func calculateAndStoreInklot(jsonPayloads *SafeJsonPayloads) {
+func CalculateAndStoreInklot(jsonPayloads *SafeJsonPayloads) {
 	d171Value, d171Exists := jsonPayloads.GetString("d171")
 	d172Value, d172Exists := jsonPayloads.GetString("d172")
 	d173Value, d173Exists := jsonPayloads.GetString("d173")
