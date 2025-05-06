@@ -114,3 +114,13 @@ func processMessagesLoop(jsonPayloads *utils.SafeJsonPayloads, messages []model.
 		}
 	}
 }
+
+// processMessagesOnce updates the JSON payload map with the given messages.
+// If a key is repeated, it overwrites the existing value.
+func processMessagesOnce(jsonPayloads *utils.SafeJsonPayloads, messages []model.Message) {
+	for _, message := range messages {
+		fieldNameLower := strings.ToLower(message.Address)
+		fieldValue := message.Value
+		jsonPayloads.Set(fieldNameLower, fieldValue)
+	}
+}

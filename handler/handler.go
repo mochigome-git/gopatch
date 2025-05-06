@@ -14,6 +14,7 @@ func Trigger(
 	jsonPayloads *utils.SafeJsonPayloads,
 	messages []model.Message,
 	cfg config.AppConfig,
+	rMsgJSONChan <-chan string,
 ) {
 
 	// Parse trigger keys once
@@ -34,9 +35,9 @@ func Trigger(
 			"trigger":           func() { handleTriggerCase(tk, jsonPayloads, messages, cfg) },
 			"hold":              func() { handleHoldCase(session, jsonPayloads, messages, cfg, isAccRate) },
 			"special":           func() { handleSpecialCase(session, tk, jsonPayloads, messages, cfg) },
-			"holdfilling":       func() { handleHoldFillingCase(session, jsonPayloads, messages, cfg) },
-			"weight":            func() { handleWeight(session, jsonPayloads, messages, cfg, false, isAccRate) },
-			"holdfillingweight": func() { handleHoldFillingWeightCase(session, jsonPayloads, messages, cfg) },
+			"holdfilling":       func() { handleHoldFillingCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
+			"weight":            func() { handleWeight(session, jsonPayloads, messages, cfg, false, isAccRate, rMsgJSONChan) },
+			"holdfillingweight": func() { handleHoldFillingWeightCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
 		}
 		// Check if the current caseKey is in the map, and handle accordingly
 		if handler, exists := caseHandlers[tk.CaseKey]; exists {

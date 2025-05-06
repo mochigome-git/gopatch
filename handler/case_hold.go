@@ -108,7 +108,7 @@ func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, mess
 
 // CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
 func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	cfg config.AppConfig) {
+	cfg config.AppConfig, rMsgJSONChan <-chan string) {
 
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
 
@@ -152,7 +152,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 			keys := []string{
 				"ch1", "ch2", "ch3", "do",
 			}
-			processPatch(session, keys, cfg, func() { prevDo = false })
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
 		}
 
 	}
@@ -161,7 +161,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 
 // CASE 7, Weight; hold the data and wait until weighing scale trigger to collect data to patch.
 func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	cfg config.AppConfig, chance bool, checkAccumulateRate AccumCheckFunc) {
+	cfg config.AppConfig, chance bool, checkAccumulateRate AccumCheckFunc, rMsgJSONChan <-chan string) {
 
 	if checkAccumulateRate() {
 		chance = true
@@ -185,19 +185,18 @@ func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messag
 	// Process CH1, CH2, CH3 Weight Triggers
 	// Check if all weight triggers (CH1, CH2, CH3) are inactive, but were previously active
 	processWeightTriggers(session, jsonPayloads, messages)
-
 	if shouldPatch("case7", chance, session) {
 		keys := []string{
 			"ch1_", "ch2_", "ch3_", "vacuum", "weightch1_", "weightch2_", "weightch3_", "counterch_",
 		}
-		processPatch(session, keys, cfg, func() { session.IsProcessing = false })
+		processPatch(session, keys, cfg, func() { session.IsProcessing = false }, rMsgJSONChan)
 	}
 
 }
 
 // CASE 8, HoldFillingWeight; hold the data and wait until weighing scale trigger to collect data to patch.
 func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	cfg config.AppConfig) {
+	cfg config.AppConfig, rMsgJSONChan <-chan string) {
 
 	for _, channel := range []string{"ch1", "ch2", "ch3"} {
 		// Retrieve NUMBERofSTATE from environment variable and convert to float64
@@ -241,7 +240,7 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 			keys := []string{
 				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_",
 			}
-			processPatch(session, keys, cfg, func() { prevDo = false })
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
 		}
 
 	}
@@ -269,7 +268,7 @@ func resetWeightTriggers(session *Session) {
 	*session.PrevWeightValueCh3 = 0
 }
 
-func processPatch(session *Session, keys []string, cfg config.AppConfig, after func()) {
+func processPatch(session *Session, keys []string, cfg config.AppConfig, after func(), rMsgJSONChan <-chan string) {
 	fmt.Println("All weight triggers are now inactive. Processing the patch.")
 
 	parts := []map[string]interface{}{}
@@ -302,6 +301,8 @@ func processPatch(session *Session, keys []string, cfg config.AppConfig, after f
 	if after != nil {
 		after()
 	}
+
+	drainChannel(rMsgJSONChan)
 }
 
 // Helper Function to merges non-empty maps and returns a new map.
@@ -340,7 +341,7 @@ func compareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, pare
 			continue
 		}
 
-		//fmt.Println("Comparing:", checkKey, newValue, existingFloat, *prevWeightValue)
+		// fmt.Println("Comparing:", checkKey, newValue, existingFloat, *prevWeightValue)
 
 		if !okExist {
 			nestedMap[checkKey] = newValue
@@ -350,8 +351,11 @@ func compareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, pare
 
 		// If the new value is greater than the existing one and greater than or equal to the previous weight
 		if newValue > existingFloat && newValue >= *prevWeightValue {
-			//fmt.Println("Updating value:", checkKey, existingFloat, "->", newValue, "prevWeight:", *prevWeightValue)
+			// fmt.Println("Updating value:", checkKey, existingFloat, "->", newValue, "prevWeight:", *prevWeightValue)
 			nestedMap[checkKey] = newValue
+			*prevWeightValue = newValue
+		} else if newValue >= *prevWeightValue {
+			// update prevWeightValue to avoid being stuck at 0
 			*prevWeightValue = newValue
 		}
 	}
@@ -379,15 +383,15 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 			return updatedMap
 		})
 
-	//fmt.Println(session.ProcessedPayloadsMap[key])
+	// fmt.Println("session val to patch", session.ProcessedPayloadsMap[key])
 }
 
 // Replaces 0 values in a map with a fallback (usually the prevWeightValue):
-func sanitizeWeightValues(data map[string]interface{}, keys []string, fallback float64) {
+func sanitizeWeightValues(m map[string]interface{}, keys []string, fallback float64) {
 	for _, key := range keys {
-		if val, ok := data[key]; ok {
-			if fval, ok := val.(float64); ok && fval == 0 {
-				data[key] = fallback
+		if val, ok := m[key]; ok {
+			if num, ok := val.(float64); ok && num == 0 {
+				m[key] = fallback
 			}
 		}
 	}
@@ -421,8 +425,10 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string) 
 func processTriggerGeneric(jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	changeNameFunc func(*utils.SafeJsonPayloads) map[string]interface{}) map[string]interface{} {
 
-	startTime := time.Now()
-	processMessagesLoop(jsonPayloads, messages, startTime, 1)
+	//startTime := time.Now()
+	//processMessagesLoop(jsonPayloads, messages, startTime, 1)
+
+	processMessagesOnce(jsonPayloads, messages)
 	utils.CalculateAndStoreInklot(jsonPayloads)
 	processedPayload := changeNameFunc(jsonPayloads)
 

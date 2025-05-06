@@ -38,7 +38,7 @@ func ProcessMQTTData(
 
 			if err := json.Unmarshal([]byte(jsonString), &messages); err != nil {
 				fmt.Printf("Error unmarshaling JSON: %v\n", err)
-				time.Sleep(time.Second)
+				// time.Sleep(time.Second)
 				continue
 			}
 
@@ -52,7 +52,7 @@ func ProcessMQTTData(
 			// Start to collect data when trigger specify device
 			// collect the data for few seconds, process for further handling method.
 			// Change Payloads title or delete the extra devices and etc..
-			Trigger(session, jsonPayloads, messages, cfg)
+			Trigger(session, jsonPayloads, messages, cfg, receivedMessagesJSONChan)
 			jsonPayloads.Clear()
 
 			return
@@ -66,6 +66,18 @@ func ProcessMQTTData(
 // To stop the goroutine, you can close the stopProcessing channel:
 func StopProcessing() {
 	close(stopProcessing)
+}
+
+func drainChannel(ch <-chan string) {
+	for {
+		select {
+		case <-ch:
+			// Discard the value
+		default:
+			// Exit when there's nothing left
+			return
+		}
+	}
 }
 
 // prettyPrintJSONWithTime handles both map[string]interface{} and *SafeJsonPayloads types
