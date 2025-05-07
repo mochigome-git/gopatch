@@ -367,33 +367,29 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 	session.Mutex.Lock()
 	defer session.Mutex.Unlock()
 
-	session.ProcessedPayloadsMap[key] = processTriggerGeneric(jsonPayloads, messages,
-		func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-			updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
+	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
+		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
 
-			keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
+		keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
 
-			compareAndUpdateNestedMap(session.ProcessedPayloadsMap, key, updatedMap, keysToCheck, prevWeightValue)
+		// // Check if any of the keys has a value of 0 — if so, drop the payload
+		// for _, k := range keysToCheck {
+		// 	if val, ok := updatedMap[k]; ok {
+		// 		if num, ok := val.(float64); ok && num == 0 {
+		// 			// Drop the payload by returning nil
+		// 			return nil
+		// 		}
+		// 	}
+		// }
 
-			// Replace 0s with previous value
-			if prevWeightValue != nil {
-				sanitizeWeightValues(updatedMap, keysToCheck, *prevWeightValue)
-			}
+		compareAndUpdateNestedMap(session.ProcessedPayloadsMap, key, updatedMap, keysToCheck, prevWeightValue)
 
-			return updatedMap
-		})
+		return updatedMap
+	})
 
-	// fmt.Println("session val to patch", session.ProcessedPayloadsMap[key])
-}
-
-// Replaces 0 values in a map with a fallback (usually the prevWeightValue):
-func sanitizeWeightValues(m map[string]interface{}, keys []string, fallback float64) {
-	for _, key := range keys {
-		if val, ok := m[key]; ok {
-			if num, ok := val.(float64); ok && num == 0 {
-				m[key] = fallback
-			}
-		}
+	// fmt.Println(session.ProcessedPayloadsMap)
+	if processed != nil {
+		session.ProcessedPayloadsMap[key] = processed
 	}
 }
 
@@ -409,10 +405,10 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string) 
 
 		// Replace old key with new key if the old key exists, delete old key
 		if value, oldKeyExists := jsonPayloads.Get(oldKey); oldKeyExists {
-			//if numericValue, isNumeric := value.(float64); isNumeric && numericValue != 0 {
-			result[newKey] = value
-			// delete(jsonPayloads, oldKey) - consider whether to delete old keys
-			//}
+			if numericValue, isNumeric := value.(float64); isNumeric && numericValue != 0 {
+				result[newKey] = value
+				// delete(jsonPayloads, oldKey) - consider whether to delete old keys
+			}
 		}
 	}
 
