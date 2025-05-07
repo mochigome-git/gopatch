@@ -144,7 +144,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 
 		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
 			prevDo = true
-			return _hold_changeName_generic(payload, "CASE_6_DO_")
+			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
 
 		processWeightTriggers(session, jsonPayloads, messages)
@@ -232,7 +232,7 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 
 		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
 			prevDo = true
-			return _hold_changeName_generic(payload, "CASE_6_DO_")
+			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
 
 		processWeightTriggers(session, jsonPayloads, messages)
@@ -337,7 +337,20 @@ func compareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, pare
 
 		// Retrieve the new value from the updateData and validate it (must be a non-zero float64)
 		newValue, okNew := updateData[checkKey].(float64)
-		if !okNew || newValue == 0 {
+
+		if !okNew {
+			// Key missing in updateData, so fallback to prevWeightValue
+			if okExist {
+				continue // keep existing value
+			}
+			// Only restore if existing doesn't exist (new map or was cleared)
+			if prevWeightValue != nil {
+				nestedMap[checkKey] = *prevWeightValue
+			}
+			continue
+		}
+
+		if newValue == 0 {
 			continue
 		}
 
@@ -368,26 +381,16 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 	defer session.Mutex.Unlock()
 
 	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key)
+		prev := session.ProcessedPayloadsMap[key] // previous map
+		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key, prev)
 
 		keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
-
-		// // Check if any of the keys has a value of 0 — if so, drop the payload
-		// for _, k := range keysToCheck {
-		// 	if val, ok := updatedMap[k]; ok {
-		// 		if num, ok := val.(float64); ok && num == 0 {
-		// 			// Drop the payload by returning nil
-		// 			return nil
-		// 		}
-		// 	}
-		// }
-
 		compareAndUpdateNestedMap(session.ProcessedPayloadsMap, key, updatedMap, keysToCheck, prevWeightValue)
 
 		return updatedMap
 	})
 
-	// fmt.Println(session.ProcessedPayloadsMap)
+	//fmt.Println(session.ProcessedPayloadsMap)
 	if processed != nil {
 		session.ProcessedPayloadsMap[key] = processed
 	}
@@ -395,7 +398,7 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 
 // Helper Function, a generic function to replace device names in the JSON payload
 // with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string) map[string]interface{} {
+func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, prev map[string]interface{}) map[string]interface{} {
 	// Define a mapping of key transformations
 	holdkeyTransformations := utils.GetKeyTransformationsFromEnv(key)
 	result := make(map[string]interface{})
@@ -403,11 +406,20 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string) 
 	// Iterate through key transformations and apply them, deleting old keys during transformation
 	for newKey, oldKey := range holdkeyTransformations {
 
-		// Replace old key with new key if the old key exists, delete old key
-		if value, oldKeyExists := jsonPayloads.Get(oldKey); oldKeyExists {
-			if numericValue, isNumeric := value.(float64); isNumeric && numericValue != 0 {
-				result[newKey] = value
-				// delete(jsonPayloads, oldKey) - consider whether to delete old keys
+		value, exists := jsonPayloads.Get(oldKey)
+		numericValue, isNumeric := value.(float64)
+
+		if exists && isNumeric {
+			if numericValue != 0 {
+				result[newKey] = numericValue
+				continue
+			}
+		}
+
+		// Fallback to previous value if available
+		if prev != nil {
+			if prevVal, ok := prev[newKey]; ok {
+				result[newKey] = prevVal
 			}
 		}
 	}
@@ -460,8 +472,8 @@ func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *utils.Saf
 func processAndPrintforVacuum(key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, session *Session) {
 	session.ProcessedPayloadsMap[key] = processTriggerGeneric(jsonPayloads, messages,
 		func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-
-			return _hold_changeName_generic(payload, "CASE_4_VACUUM_")
+			prev := session.ProcessedPayloadsMap[key]
+			return _hold_changeName_generic(payload, "CASE_4_VACUUM_", prev)
 		})
 }
 

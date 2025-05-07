@@ -26,7 +26,7 @@ func handleSpecialCase(session *Session, tk utils.TriggerKey, jsonPayloads *util
 			}
 
 			result := ProcessTriggerGenericSpecial(jsonPayloads, messages, trigger, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-				return _hold_changeName_generic(payload, "CASE_5_DEGAS_")
+				return _hold_changeName_generic(payload, "CASE_5_DEGAS_", nil)
 			})
 
 			// Assuming pica1 is a float64 value in the result map
