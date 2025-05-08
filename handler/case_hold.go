@@ -229,7 +229,6 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 
 	if session.AllSuccessZero && session.IsProcessing {
 		prevDo := false
-
 		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
 			prevDo = true
 			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
@@ -276,6 +275,23 @@ func processPatch(session *Session, keys []string, cfg config.AppConfig, after f
 		parts = append(parts, session.ProcessedPayloadsMap[key])
 	}
 	data := mergeNonEmptyMaps(parts...)
+
+	// Count top-level nil values
+	nullCount := 0
+	for _, value := range data {
+		if value == nil {
+			nullCount++
+		}
+	}
+	if nullCount > 3 {
+		fmt.Println("Aborting patch: more than 3 null values in data")
+		resetWeightTriggers(session)
+		if after != nil {
+			after()
+		}
+		drainChannel(rMsgJSONChan)
+		return
+	}
 
 	startTime := time.Now()
 	jsonData, err := json.Marshal(data)
@@ -415,6 +431,8 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, 
 				continue
 			}
 		}
+
+		fmt.Println(prev)
 
 		// Fallback to previous value if available
 		if prev != nil {
