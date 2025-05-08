@@ -7,6 +7,7 @@ import (
 var (
 	sessionStore = make(map[string]*Session)
 	sessionMutex sync.Mutex // prevent race conditions if accessed concurrently
+	prev         map[string]interface{}
 )
 
 type Session struct {

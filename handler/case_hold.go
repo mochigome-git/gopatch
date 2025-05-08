@@ -397,7 +397,10 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 	defer session.Mutex.Unlock()
 
 	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-		prev := session.ProcessedPayloadsMap[key] // previous map
+		if old, exists := session.ProcessedPayloadsMap[key]; exists {
+			prev = deepCopyMap(old)
+		}
+
 		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key, prev)
 
 		keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
@@ -432,8 +435,6 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, 
 			}
 		}
 
-		fmt.Println(prev)
-
 		// Fallback to previous value if available
 		if prev != nil {
 			if prevVal, ok := prev[newKey]; ok {
@@ -444,6 +445,14 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, 
 
 	// Apply the specific transformation function
 	return result
+}
+
+func deepCopyMap(original map[string]interface{}) map[string]interface{} {
+	copy := make(map[string]interface{})
+	for k, v := range original {
+		copy[k] = v
+	}
+	return copy
 }
 
 // ProcessTriggerGeneric is a generic function to process trigger key
