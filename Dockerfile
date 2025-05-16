@@ -1,5 +1,5 @@
 # Stage 1: Build the Go program
-FROM golang:1.24.2-alpine AS build
+FROM golang:1.24.3-alpine AS build
 WORKDIR /opt/go/patch
 
 # Copy the project files and build the program

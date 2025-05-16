@@ -185,6 +185,7 @@ func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messag
 	// Process CH1, CH2, CH3 Weight Triggers
 	// Check if all weight triggers (CH1, CH2, CH3) are inactive, but were previously active
 	processWeightTriggers(session, jsonPayloads, messages)
+	fmt.Println(jsonPayloads)
 	if shouldPatch("case7", chance, session) {
 		keys := []string{
 			"ch1_", "ch2_", "ch3_", "vacuum", "weightch1_", "weightch2_", "weightch3_", "counterch_",
