@@ -142,7 +142,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 	if session.AllSuccessZero && session.IsProcessing {
 		prevDo := false
 
-		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
+		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 			prevDo = true
 			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
@@ -213,7 +213,7 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 			session.Mutex.Lock()
 
 			if session.ProcessedPayloadsMap[channel] == nil {
-				session.ProcessedPayloadsMap[channel] = make(map[string]interface{})
+				session.ProcessedPayloadsMap[channel] = make(map[string]any)
 			}
 			session.ProcessedPayloadsMap[channel][channel+"_fill"] = 1
 			session.Mutex.Unlock()
@@ -230,12 +230,13 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 
 	if session.AllSuccessZero && session.IsProcessing {
 		prevDo := false
-		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
+		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 			prevDo = true
 			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
 
 		processWeightTriggers(session, jsonPayloads, messages)
+
 		if shouldPatch("case8", prevDo, session) {
 			keys := []string{
 				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_",
@@ -260,6 +261,7 @@ func shouldPatch(caseID string, ready bool, session *Session) bool {
 // Reset previous triggers to avoid reprocessing
 func resetWeightTriggers(session *Session) {
 	session.AllSuccessZero = false
+	session.IsProcessing = false
 	session.PrevWeightTriggerCh1 = false
 	session.PrevWeightTriggerCh2 = false
 	session.PrevWeightTriggerCh3 = false
@@ -271,7 +273,7 @@ func resetWeightTriggers(session *Session) {
 func processPatch(session *Session, keys []string, cfg config.AppConfig, after func(), rMsgJSONChan <-chan string) {
 	fmt.Println("All weight triggers are now inactive. Processing the patch.")
 
-	parts := []map[string]interface{}{}
+	parts := []map[string]any{}
 	for _, key := range keys {
 		parts = append(parts, session.ProcessedPayloadsMap[key])
 	}
@@ -323,8 +325,8 @@ func processPatch(session *Session, keys []string, cfg config.AppConfig, after f
 }
 
 // Helper Function to merges non-empty maps and returns a new map.
-func mergeNonEmptyMaps(maps ...map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+func mergeNonEmptyMaps(maps ...map[string]any) map[string]any {
+	result := make(map[string]any)
 
 	for _, m := range maps {
 		if len(m) > 0 {
@@ -339,8 +341,8 @@ func mergeNonEmptyMaps(maps ...map[string]interface{}) map[string]interface{} {
 
 // Helper function to compares and updates values in a nested map based on the provided keys.
 // It updates the map if the new value is larger than the existing one; for CASE 7 only
-func compareAndUpdateNestedMap(parentMap map[string]map[string]interface{}, parentKey string,
-	updateData map[string]interface{}, keysToCheck []string, prevWeightValue *float64) {
+func compareAndUpdateNestedMap(parentMap map[string]map[string]any, parentKey string,
+	updateData map[string]any, keysToCheck []string, prevWeightValue *float64) {
 
 	nestedMap := parentMap[parentKey]
 	if nestedMap == nil {
@@ -397,7 +399,7 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 	session.Mutex.Lock()
 	defer session.Mutex.Unlock()
 
-	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
+	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 		if old, exists := session.ProcessedPayloadsMap[key]; exists {
 			prev = deepCopyMap(old)
 		}
@@ -418,10 +420,10 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 
 // Helper Function, a generic function to replace device names in the JSON payload
 // with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, prev map[string]interface{}) map[string]interface{} {
+func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, prev map[string]any) map[string]any {
 	// Define a mapping of key transformations
 	holdkeyTransformations := utils.GetKeyTransformationsFromEnv(key)
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	// Iterate through key transformations and apply them, deleting old keys during transformation
 	for newKey, oldKey := range holdkeyTransformations {
@@ -448,8 +450,8 @@ func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, 
 	return result
 }
 
-func deepCopyMap(original map[string]interface{}) map[string]interface{} {
-	copy := make(map[string]interface{})
+func deepCopyMap(original map[string]any) map[string]any {
+	copy := make(map[string]any)
 	for k, v := range original {
 		copy[k] = v
 	}
@@ -459,7 +461,7 @@ func deepCopyMap(original map[string]interface{}) map[string]interface{} {
 // ProcessTriggerGeneric is a generic function to process trigger key
 // and return the corresponding processed payload
 func processTriggerGeneric(jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	changeNameFunc func(*utils.SafeJsonPayloads) map[string]interface{}) map[string]interface{} {
+	changeNameFunc func(*utils.SafeJsonPayloads) map[string]any) map[string]any {
 
 	//startTime := time.Now()
 	//processMessagesLoop(jsonPayloads, messages, startTime, 1)
@@ -499,7 +501,7 @@ func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *utils.Saf
 // for CASE 4 & CASE 7.
 func processAndPrintforVacuum(key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, session *Session) {
 	session.ProcessedPayloadsMap[key] = processTriggerGeneric(jsonPayloads, messages,
-		func(payload *utils.SafeJsonPayloads) map[string]interface{} {
+		func(payload *utils.SafeJsonPayloads) map[string]any {
 			prev := session.ProcessedPayloadsMap[key]
 			return _hold_changeName_generic(payload, "CASE_4_VACUUM_", prev)
 		})

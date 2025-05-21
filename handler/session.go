@@ -7,7 +7,7 @@ import (
 var (
 	sessionStore = make(map[string]*Session)
 	sessionMutex sync.Mutex // prevent race conditions if accessed concurrently
-	prev         map[string]interface{}
+	prev         map[string]any
 )
 
 type Session struct {
@@ -24,26 +24,26 @@ type Session struct {
 	PrevWeightValueCh1   *float64
 	PrevWeightValueCh2   *float64
 	PrevWeightValueCh3   *float64
-	ProcessedPayloadsMap map[string]map[string]interface{}
+	ProcessedPayloadsMap map[string]map[string]any
 }
 
 func NewSession() *Session {
 	return &Session{
 		// Create a map to store processed payloads (ch1, ch2, ch3; _xx_jsonPayloads) for holdCase
-		ProcessedPayloadsMap: map[string]map[string]interface{}{
-			"ch1_":       make(map[string]interface{}),
-			"ch2_":       make(map[string]interface{}),
-			"ch3_":       make(map[string]interface{}),
-			"ch1":        make(map[string]interface{}),
-			"ch2":        make(map[string]interface{}),
-			"ch3":        make(map[string]interface{}),
-			"vacuum":     make(map[string]interface{}),
-			"degas":      make(map[string]interface{}),
-			"do":         make(map[string]interface{}),
-			"weightch1_": make(map[string]interface{}),
-			"weightch2_": make(map[string]interface{}),
-			"weightch3_": make(map[string]interface{}),
-			"counter":    make(map[string]interface{}),
+		ProcessedPayloadsMap: map[string]map[string]any{
+			"ch1_":       make(map[string]any),
+			"ch2_":       make(map[string]any),
+			"ch3_":       make(map[string]any),
+			"ch1":        make(map[string]any),
+			"ch2":        make(map[string]any),
+			"ch3":        make(map[string]any),
+			"vacuum":     make(map[string]any),
+			"degas":      make(map[string]any),
+			"do":         make(map[string]any),
+			"weightch1_": make(map[string]any),
+			"weightch2_": make(map[string]any),
+			"weightch3_": make(map[string]any),
+			"counter":    make(map[string]any),
 		},
 		PrevWeightValueCh1: new(float64),
 		PrevWeightValueCh2: new(float64),
