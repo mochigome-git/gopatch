@@ -180,13 +180,10 @@ func CalculateAndStoreInklot(jsonPayloads *SafeJsonPayloads) {
 // Helper Function, a generic function to replace device names in the JSON payload
 // with readable keys for a specific case.
 func Hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string, session *session.Session) map[string]any {
-	// Define a mapping of key transformations
 	holdkeyTransformations := GetKeyTransformationsFromEnv(key)
 	result := make(map[string]any)
 
-	// Iterate through key transformations and apply them, deleting old keys during transformation
 	for newKey, oldKey := range holdkeyTransformations {
-
 		value, exists := jsonPayloads.Get(oldKey)
 		numericValue, isNumeric := value.(float64)
 
@@ -197,15 +194,13 @@ func Hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string, session
 			}
 		}
 
-		// Fallback to previous value if available
-		if session.Prev != nil {
+		if session != nil && session.Prev != nil {
 			if prevVal, ok := session.Prev[newKey]; ok {
 				result[newKey] = prevVal
 			}
 		}
 	}
 
-	// Apply the specific transformation function
 	return result
 }
 
@@ -256,39 +251,41 @@ func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
 		{"CASE_9_LI_", "INK_LOT_RE", 4, "ink_lot"},
 	}
 
+	// Map to collect which keys are used
+	usedKeys := make(map[string]bool)
+
+	// Process all tasks first
 	for _, t := range tasks {
 		keyTransformations := GetKeyTransformationsFromEnv(t.envPrefix)
 		var builder strings.Builder
-		var keysToDelete []string
 
 		for i := 1; i <= t.count; i++ {
 			envKey := fmt.Sprintf("%s%d", t.keyPrefix, i)
-
 			deviceKey, ok := keyTransformations[envKey]
 			if !ok {
+				fmt.Printf("Warning: Missing env key %s\n", envKey)
 				continue
 			}
-
 			val, ok := jsonPayloads.GetString(deviceKey)
 			if !ok {
 				continue
 			}
-
-			builder.WriteString(reverseString(val))
-			keysToDelete = append(keysToDelete, deviceKey)
+			reversed := reverseString(val)
+			//fmt.Printf("Processing %s → %s → %s → reversed: %s\n", envKey, deviceKey, val, reversed) // Debug
+			builder.WriteString(reversed)
+			usedKeys[deviceKey] = true
 		}
 
 		result := builder.String()
-		jsonPayloads.Set(t.outputKey, result)
-
-		// Delete raw device keys after processing
-		for _, key := range keysToDelete {
-			jsonPayloads.Delete(key)
+		if result != "" {
+			jsonPayloads.Set(t.outputKey, result)
 		}
-
-		//fmt.Printf("%s: %s\n", t.outputKey, result)
 	}
 
+	// Now safely delete used keys
+	for key := range usedKeys {
+		jsonPayloads.Delete(key)
+	}
 }
 
 func StoreFlattenedPayloadToSession(jsonPayloads *SafeJsonPayloads, session *session.Session) {
