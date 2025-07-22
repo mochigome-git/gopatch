@@ -247,8 +247,8 @@ func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
 	}
 
 	tasks := []task{
-		{"CASE_9_MN_", "MODEL_NAME_RE", 6, "model_name"},
-		{"CASE_9_LI_", "INK_LOT_RE", 4, "ink_lot"},
+		{"CASE_9_MN_", "MODEL_NAME_RE", 5, "model_name"},
+		{"CASE_9_LI_", "INK_LOT_RE", 3, "ink_lot"},
 	}
 
 	// Map to collect which keys are used
@@ -259,7 +259,7 @@ func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
 		keyTransformations := GetKeyTransformationsFromEnv(t.envPrefix)
 		var builder strings.Builder
 
-		for i := 1; i <= t.count; i++ {
+		for i := 0; i <= t.count; i++ {
 			envKey := fmt.Sprintf("%s%d", t.keyPrefix, i)
 			deviceKey, ok := keyTransformations[envKey]
 			if !ok {
@@ -268,10 +268,11 @@ func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
 			}
 			val, ok := jsonPayloads.GetString(deviceKey)
 			if !ok {
+				fmt.Printf("Warning: Missing payload key %s (from %s)\n", deviceKey, envKey)
 				continue
 			}
 			reversed := reverseString(val)
-			//fmt.Printf("Processing %s → %s → %s → reversed: %s\n", envKey, deviceKey, val, reversed) // Debug
+			// fmt.Printf("Processing %s → %s → %s → reversed: %s\n", envKey, deviceKey, val, reversed) // Debug
 			builder.WriteString(reversed)
 			usedKeys[deviceKey] = true
 		}

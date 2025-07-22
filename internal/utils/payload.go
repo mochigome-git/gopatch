@@ -1,8 +1,12 @@
 package utils
 
-import "sync"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
-type JsonPayloads map[string]interface{}
+type JsonPayloads map[string]any
 
 type SafeJsonPayloads struct {
 	mu   sync.RWMutex
@@ -15,14 +19,14 @@ func NewSafeJsonPayloads() *SafeJsonPayloads {
 	}
 }
 
-func (s *SafeJsonPayloads) Get(key string) (interface{}, bool) {
+func (s *SafeJsonPayloads) Get(key string) (any, bool) {
 	s.mu.RLock() // Lock for reading
 	defer s.mu.RUnlock()
 	val, exists := s.data[key]
 	return val, exists
 }
 
-func (s *SafeJsonPayloads) Set(key string, value interface{}) {
+func (s *SafeJsonPayloads) Set(key string, value any) {
 	s.mu.Lock() // Lock for writing
 	defer s.mu.Unlock()
 	s.data[key] = value
@@ -53,28 +57,62 @@ func (s *SafeJsonPayloads) GetFloat64(key string) (float64, bool) {
 	return f, ok
 }
 
+// func (s *SafeJsonPayloads) GetString(key string) (string, bool) {
+// 	s.mu.RLock() // Lock for reading
+// 	defer s.mu.RUnlock()
+// 	if val, ok := s.data[key]; ok {
+// 		strVal, ok := val.(string)
+// 		return strVal, ok
+// 	}
+// 	return "", false
+// }
+
 func (s *SafeJsonPayloads) GetString(key string) (string, bool) {
-	s.mu.RLock() // Lock for reading
+	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if val, ok := s.data[key]; ok {
-		strVal, ok := val.(string)
-		return strVal, ok
+
+	val, ok := s.data[key]
+	if !ok {
+		trimmedKey := strings.TrimSpace(key)
+		for k := range s.data {
+			if strings.EqualFold(trimmedKey, strings.TrimSpace(k)) {
+				val = s.data[k]
+				ok = true
+				break
+			}
+		}
 	}
-	return "", false
+
+	if !ok {
+		return "", false
+	}
+
+	switch v := val.(type) {
+	case string:
+		return v, true
+	case fmt.Stringer:
+		return v.String(), true
+	case []byte:
+		return string(v), true
+	case int, int64, float64, bool:
+		return fmt.Sprint(v), true
+	default:
+		return "", false
+	}
 }
 
-func (s *SafeJsonPayloads) GetData() map[string]interface{} {
+func (s *SafeJsonPayloads) GetData() map[string]any {
 	s.mu.RLock() // Lock for reading
 	defer s.mu.RUnlock()
 
-	copyMap := make(map[string]interface{}, len(s.data))
+	copyMap := make(map[string]any, len(s.data))
 	for k, v := range s.data {
 		copyMap[k] = v
 	}
 	return copyMap
 }
 
-func (s *SafeJsonPayloads) GetDC(key string) (interface{}, bool) {
+func (s *SafeJsonPayloads) GetDC(key string) (any, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -85,14 +123,14 @@ func (s *SafeJsonPayloads) GetDC(key string) (interface{}, bool) {
 
 	// Perform a shallow copy for basic types or use deep copy logic for composite types
 	switch v := val.(type) {
-	case map[string]interface{}:
-		copyMap := make(map[string]interface{}, len(v))
+	case map[string]any:
+		copyMap := make(map[string]any, len(v))
 		for k, val := range v {
 			copyMap[k] = val // note: values aren't deep-copied
 		}
 		return copyMap, true
-	case []interface{}:
-		copySlice := make([]interface{}, len(v))
+	case []any:
+		copySlice := make([]any, len(v))
 		copy(copySlice, v)
 		return copySlice, true
 	default:
