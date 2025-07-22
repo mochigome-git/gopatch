@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"gopatch/config"
+	"gopatch/internal/session"
+	"gopatch/internal/utils"
 	"gopatch/model"
-	"gopatch/utils"
 	"log"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ func ProcessMQTTData(
 	// Create a persistent session once
 	// Use unique key per logical case
 	caseKey := cfg.Function + "_" + cfg.Trigger
-	session := GetOrCreateSession(caseKey)
+	session := session.GetOrCreateSession(caseKey)
 
 	// Create a map to store all JSON payloads
 	jsonPayloads := utils.NewSafeJsonPayloads()

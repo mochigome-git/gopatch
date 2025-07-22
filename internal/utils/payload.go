@@ -100,3 +100,22 @@ func (s *SafeJsonPayloads) GetDC(key string) (interface{}, bool) {
 		return v, true
 	}
 }
+
+func (s *SafeJsonPayloads) Range(fn func(key string, val any)) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for k, v := range s.data {
+		fn(k, v)
+	}
+}
+
+func (s *SafeJsonPayloads) Data() map[string]any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	// Return a copy to avoid race
+	copy := make(map[string]any, len(s.data))
+	for k, v := range s.data {
+		copy[k] = v
+	}
+	return copy
+}

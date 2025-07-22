@@ -2,15 +2,16 @@ package handler
 
 import (
 	"gopatch/config"
+	"gopatch/internal/session"
+	"gopatch/internal/utils"
 	"gopatch/model"
-	"gopatch/utils"
 	"os"
 )
 
 type AccumCheckFunc func() bool // Check Accumalate Rate if 0 skip process
 
 func Trigger(
-	session *Session,
+	session *session.Session,
 	jsonPayloads *utils.SafeJsonPayloads,
 	messages []model.Message,
 	cfg config.AppConfig,
@@ -38,6 +39,7 @@ func Trigger(
 			"holdfilling":       func() { handleHoldFillingCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
 			"weight":            func() { handleWeight(session, jsonPayloads, messages, cfg, false, isAccRate, rMsgJSONChan) },
 			"holdfillingweight": func() { handleHoldFillingWeightCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
+			"holdmcs":           func() { handleHoldMCSCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
 		}
 		// Check if the current caseKey is in the map, and handle accordingly
 		if handler, exists := caseHandlers[tk.CaseKey]; exists {

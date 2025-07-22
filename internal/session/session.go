@@ -1,4 +1,4 @@
-package handler
+package session
 
 import (
 	"sync"
@@ -7,7 +7,6 @@ import (
 var (
 	sessionStore = make(map[string]*Session)
 	sessionMutex sync.Mutex // prevent race conditions if accessed concurrently
-	prev         map[string]any
 )
 
 type Session struct {
@@ -25,6 +24,7 @@ type Session struct {
 	PrevWeightValueCh2   *float64
 	PrevWeightValueCh3   *float64
 	ProcessedPayloadsMap map[string]map[string]any
+	Prev                 map[string]any
 }
 
 func NewSession() *Session {

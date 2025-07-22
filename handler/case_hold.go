@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"gopatch/config"
+	"gopatch/internal/session"
+	"gopatch/internal/utils"
 	"gopatch/model"
 	"gopatch/patch"
-	"gopatch/utils"
 	"log"
 	"os"
 	"strconv"
@@ -46,7 +47,7 @@ func handleTriggerCase(tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads
 }
 
 // CASE 4, Hold; hold the data and wait until patch trigger
-func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+func handleHoldCase(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	cfg config.AppConfig, checkAccumulateRate AccumCheckFunc) {
 
 	if checkAccumulateRate() {
@@ -107,7 +108,7 @@ func handleHoldCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, mess
 }
 
 // CASE 6, HoldFilling; handling the device when triggered and hold for 4second to collect data to patch.
-func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+func handleHoldFillingCase(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	cfg config.AppConfig, rMsgJSONChan <-chan string) {
 
 	triggerChannels := []string{"ch1", "ch2", "ch3"}
@@ -142,9 +143,9 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 	if session.AllSuccessZero && session.IsProcessing {
 		prevDo := false
 
-		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
+		session.ProcessedPayloadsMap["do"] = utils.ProcessTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 			prevDo = true
-			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
+			return utils.Hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
 
 		processWeightTriggers(session, jsonPayloads, messages)
@@ -160,7 +161,7 @@ func handleHoldFillingCase(session *Session, jsonPayloads *utils.SafeJsonPayload
 }
 
 // CASE 7, Weight; hold the data and wait until weighing scale trigger to collect data to patch.
-func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+func handleWeight(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	cfg config.AppConfig, chance bool, checkAccumulateRate AccumCheckFunc, rMsgJSONChan <-chan string) {
 
 	if checkAccumulateRate() {
@@ -196,7 +197,7 @@ func handleWeight(session *Session, jsonPayloads *utils.SafeJsonPayloads, messag
 }
 
 // CASE 8, HoldFillingWeight; hold the data and wait until weighing scale trigger to collect data to patch.
-func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+func handleHoldFillingWeightCase(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	cfg config.AppConfig, rMsgJSONChan <-chan string) {
 
 	for _, channel := range []string{"ch1", "ch2", "ch3"} {
@@ -230,9 +231,9 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 
 	if session.AllSuccessZero && session.IsProcessing {
 		prevDo := false
-		session.ProcessedPayloadsMap["do"] = processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
+		session.ProcessedPayloadsMap["do"] = utils.ProcessTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 			prevDo = true
-			return _hold_changeName_generic(payload, "CASE_6_DO_", nil)
+			return utils.Hold_changeName_generic(payload, "CASE_6_DO_", nil)
 		})
 
 		processWeightTriggers(session, jsonPayloads, messages)
@@ -248,7 +249,63 @@ func handleHoldFillingWeightCase(session *Session, jsonPayloads *utils.SafeJsonP
 
 }
 
-func shouldPatch(caseID string, ready bool, session *Session) bool {
+// CASE 9, HoldMCS; hold the data and wait MCS system trigger to collect data to patch.
+func handleHoldMCSCase(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+	cfg config.AppConfig, rMsgJSONChan <-chan string) {
+
+	for _, channel := range []string{"ch1", "ch2", "ch3"} {
+		// Retrieve NUMBERofSTATE from environment variable and convert to float64
+		NUMBERofSTATEStr := os.Getenv("CASE_6_TRIGGER_NUMBERofSTATE")
+		NUMBERofSTATE, err := strconv.ParseFloat(NUMBERofSTATEStr, 64)
+		if err != nil {
+			fmt.Println("Error parsing NUMBERofSTATE:", err)
+			continue
+		}
+
+		triggerValue, ok := jsonPayloads.GetFloat64(os.Getenv("CASE_6_TRIGGER_" + channel))
+		if ok && triggerValue == NUMBERofSTATE {
+			session.Mutex.Lock()
+			if session.ProcessedPayloadsMap[channel] == nil {
+				session.ProcessedPayloadsMap[channel] = make(map[string]any)
+			}
+			session.ProcessedPayloadsMap[channel][channel+"_fill"] = 1
+			session.Mutex.Unlock()
+			session.IsProcessing = true
+		}
+	}
+
+	utils.ChangeName(jsonPayloads)
+	utils.ConvertAndStoreModelName(jsonPayloads)
+	utils.StoreFlattenedPayloadToSession(jsonPayloads, session)
+
+	// Check if all channels are successful and processing is active
+	// Use a flag to track if all channels have success = 0
+	ch1, ok1 := jsonPayloads.GetFloat64(os.Getenv("CASE_6_TRIGGER_ch1"))
+	ch2, ok2 := jsonPayloads.GetFloat64(os.Getenv("CASE_6_TRIGGER_ch2"))
+	ch3, ok3 := jsonPayloads.GetFloat64(os.Getenv("CASE_6_TRIGGER_ch3"))
+	session.AllSuccessZero = ok1 && ok2 && ok3 && ch1 == 0 && ch2 == 0 && ch3 == 0
+
+	if session.AllSuccessZero && session.IsProcessing {
+		prevDo := false
+		session.ProcessedPayloadsMap["do"] = utils.ProcessTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
+			prevDo = true
+			return utils.Hold_changeName_generic(payload, "CASE_6_DO_", nil)
+		})
+
+		processWeightTriggers(session, jsonPayloads, messages)
+
+		if shouldPatch("case8", prevDo, session) {
+			keys := []string{
+				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_", "ink_lot", "model_name", "lower_limit", "standard", "upper_limit",
+			}
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
+		}
+
+	}
+
+}
+
+func shouldPatch(caseID string, ready bool, session *session.Session) bool {
 	if caseID == "case7" || caseID == "case8" {
 		// Case 7 & Case 8: Wait for all channels to deactivate after being active
 		return !session.WeightTriggerCh1 && !session.WeightTriggerCh2 && !session.WeightTriggerCh3 &&
@@ -259,7 +316,7 @@ func shouldPatch(caseID string, ready bool, session *Session) bool {
 }
 
 // Reset previous triggers to avoid reprocessing
-func resetWeightTriggers(session *Session) {
+func resetWeightTriggers(session *session.Session) {
 	session.AllSuccessZero = false
 	session.IsProcessing = false
 	session.PrevWeightTriggerCh1 = false
@@ -270,7 +327,7 @@ func resetWeightTriggers(session *Session) {
 	*session.PrevWeightValueCh3 = 0
 }
 
-func processPatch(session *Session, keys []string, cfg config.AppConfig, after func(), rMsgJSONChan <-chan string) {
+func processPatch(session *session.Session, keys []string, cfg config.AppConfig, after func(), rMsgJSONChan <-chan string) {
 	fmt.Println("All weight triggers are now inactive. Processing the patch.")
 
 	parts := []map[string]any{}
@@ -395,16 +452,16 @@ func compareAndUpdateNestedMap(parentMap map[string]map[string]any, parentKey st
 
 // Procees to assigning the common logic to a function and then call that function inside each case
 // Handle the common logic for case string and float64;
-func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, prevWeightValue *float64) {
+func processAndPrint(session *session.Session, key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, prevWeightValue *float64) {
 	session.Mutex.Lock()
 	defer session.Mutex.Unlock()
 
-	processed := processTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
+	processed := utils.ProcessTriggerGeneric(jsonPayloads, messages, func(payload *utils.SafeJsonPayloads) map[string]any {
 		if old, exists := session.ProcessedPayloadsMap[key]; exists {
-			prev = deepCopyMap(old)
+			session.Prev = utils.DeepCopyMap(old)
 		}
 
-		updatedMap := _hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key, prev)
+		updatedMap := utils.Hold_changeName_generic(payload, "HOLD_KEY_TRANSOFRMATION_"+key, session)
 
 		keysToCheck := []string{"ch3_weighing", "ch1_weighing", "ch2_weighing"}
 		compareAndUpdateNestedMap(session.ProcessedPayloadsMap, key, updatedMap, keysToCheck, prevWeightValue)
@@ -418,65 +475,10 @@ func processAndPrint(session *Session, key string, jsonPayloads *utils.SafeJsonP
 	}
 }
 
-// Helper Function, a generic function to replace device names in the JSON payload
-// with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads *utils.SafeJsonPayloads, key string, prev map[string]any) map[string]any {
-	// Define a mapping of key transformations
-	holdkeyTransformations := utils.GetKeyTransformationsFromEnv(key)
-	result := make(map[string]any)
-
-	// Iterate through key transformations and apply them, deleting old keys during transformation
-	for newKey, oldKey := range holdkeyTransformations {
-
-		value, exists := jsonPayloads.Get(oldKey)
-		numericValue, isNumeric := value.(float64)
-
-		if exists && isNumeric {
-			if numericValue != 0 {
-				result[newKey] = numericValue
-				continue
-			}
-		}
-
-		// Fallback to previous value if available
-		if prev != nil {
-			if prevVal, ok := prev[newKey]; ok {
-				result[newKey] = prevVal
-			}
-		}
-	}
-
-	// Apply the specific transformation function
-	return result
-}
-
-func deepCopyMap(original map[string]any) map[string]any {
-	copy := make(map[string]any)
-	for k, v := range original {
-		copy[k] = v
-	}
-	return copy
-}
-
-// ProcessTriggerGeneric is a generic function to process trigger key
-// and return the corresponding processed payload
-func processTriggerGeneric(jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
-	changeNameFunc func(*utils.SafeJsonPayloads) map[string]any) map[string]any {
-
-	//startTime := time.Now()
-	//processMessagesLoop(jsonPayloads, messages, startTime, 1)
-
-	processMessagesOnce(jsonPayloads, messages)
-	utils.CalculateAndStoreInklot(jsonPayloads)
-	processedPayload := changeNameFunc(jsonPayloads)
-
-	return processedPayload
-}
-
 // Helper function to process the trigger for each channel;
 // for CASE 4 and CASE 7
 func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *utils.SafeJsonPayloads,
-	messages []model.Message, session *Session) {
+	messages []model.Message, session *session.Session) {
 
 	TRIGGER, ok := jsonPayloads.Get(os.Getenv(triggerEnvVar))
 	if !ok {
@@ -499,16 +501,16 @@ func processChannelTrigger(triggerEnvVar, prefix string, jsonPayloads *utils.Saf
 // to a function and then call that function inside each case
 // Handle the common logic for case if not nil;
 // for CASE 4 & CASE 7.
-func processAndPrintforVacuum(key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, session *Session) {
-	session.ProcessedPayloadsMap[key] = processTriggerGeneric(jsonPayloads, messages,
+func processAndPrintforVacuum(key string, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message, session *session.Session) {
+	session.ProcessedPayloadsMap[key] = utils.ProcessTriggerGeneric(jsonPayloads, messages,
 		func(payload *utils.SafeJsonPayloads) map[string]any {
-			prev := session.ProcessedPayloadsMap[key]
-			return _hold_changeName_generic(payload, "CASE_4_VACUUM_", prev)
+			session.Prev = session.ProcessedPayloadsMap[key]
+			return utils.Hold_changeName_generic(payload, "CASE_4_VACUUM_", session)
 		})
 }
 
 // Process for weight triggers (CH1, CH2, CH3); for CASE 7 & CASE 8
-func processWeightTriggers(session *Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message) {
+func processWeightTriggers(session *session.Session, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message) {
 	var wg sync.WaitGroup
 
 	// A helper function to process each weight trigger concurrently

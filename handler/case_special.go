@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"gopatch/config"
+	"gopatch/internal/session"
+	"gopatch/internal/utils"
 	"gopatch/model"
 	"gopatch/patch"
-	"gopatch/utils"
 	"time"
 )
 
 // CASE 5, Special; handling a device's highest value and average value and patch it, when the trigger is 1
-func handleSpecialCase(session *Session, tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
+func handleSpecialCase(session *session.Session, tk utils.TriggerKey, jsonPayloads *utils.SafeJsonPayloads, messages []model.Message,
 	cfg config.AppConfig) {
 	// Assuming these variables need to be declared and initialized
 	var startTime time.Time
@@ -26,7 +27,7 @@ func handleSpecialCase(session *Session, tk utils.TriggerKey, jsonPayloads *util
 			}
 
 			result := ProcessTriggerGenericSpecial(jsonPayloads, messages, trigger, func(payload *utils.SafeJsonPayloads) map[string]interface{} {
-				return _hold_changeName_generic(payload, "CASE_5_DEGAS_", nil)
+				return utils.Hold_changeName_generic(payload, "CASE_5_DEGAS_", nil)
 			})
 
 			// Assuming pica1 is a float64 value in the result map

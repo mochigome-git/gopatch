@@ -14,3 +14,4 @@ services:
       MQTT_PORT: ${MQTT_PORT}
       MQTT_TOPIC: ${MQTT_TOPIC}
       BASH_API: ${BASH_API}
+

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"gopatch/internal/session"
+	"gopatch/model"
 	"os"
 	"strings"
 )
@@ -56,10 +58,10 @@ func reverseString(s string) string {
 
 // Helper Function, a generic function to replace device names in the JSON payload
 // with readable keys for a specific case.
-func _hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string) map[string]interface{} {
+func _hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string) map[string]any {
 	// Define a mapping of key transformations
 	holdkeyTransformations := GetKeyTransformationsFromEnv(key)
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	// Iterate through key transformations and apply them, deleting old keys during transformation
 	for newKey, oldKey := range holdkeyTransformations {
@@ -173,4 +175,139 @@ func CalculateAndStoreInklot(jsonPayloads *SafeJsonPayloads) {
 	jsonPayloads.Delete("d171")
 	jsonPayloads.Delete("d172")
 	jsonPayloads.Delete("d173")
+}
+
+// Helper Function, a generic function to replace device names in the JSON payload
+// with readable keys for a specific case.
+func Hold_changeName_generic(jsonPayloads *SafeJsonPayloads, key string, session *session.Session) map[string]any {
+	// Define a mapping of key transformations
+	holdkeyTransformations := GetKeyTransformationsFromEnv(key)
+	result := make(map[string]any)
+
+	// Iterate through key transformations and apply them, deleting old keys during transformation
+	for newKey, oldKey := range holdkeyTransformations {
+
+		value, exists := jsonPayloads.Get(oldKey)
+		numericValue, isNumeric := value.(float64)
+
+		if exists && isNumeric {
+			if numericValue != 0 {
+				result[newKey] = numericValue
+				continue
+			}
+		}
+
+		// Fallback to previous value if available
+		if session.Prev != nil {
+			if prevVal, ok := session.Prev[newKey]; ok {
+				result[newKey] = prevVal
+			}
+		}
+	}
+
+	// Apply the specific transformation function
+	return result
+}
+
+func DeepCopyMap(original map[string]any) map[string]any {
+	copy := make(map[string]any)
+	for k, v := range original {
+		copy[k] = v
+	}
+	return copy
+}
+
+// ProcessTriggerGeneric is a generic function to process trigger key
+// and return the corresponding processed payload
+func ProcessTriggerGeneric(jsonPayloads *SafeJsonPayloads, messages []model.Message,
+	changeNameFunc func(*SafeJsonPayloads) map[string]any) map[string]any {
+
+	//startTime := time.Now()
+	//processMessagesLoop(jsonPayloads, messages, startTime, 1)
+
+	processMessagesOnce(jsonPayloads, messages)
+	CalculateAndStoreInklot(jsonPayloads)
+	processedPayload := changeNameFunc(jsonPayloads)
+
+	return processedPayload
+}
+
+// processMessagesOnce updates the JSON payload map with the given messages.
+// If a key is repeated, it overwrites the existing value.
+func processMessagesOnce(jsonPayloads *SafeJsonPayloads, messages []model.Message) {
+	for _, message := range messages {
+		fieldNameLower := strings.ToLower(message.Address)
+		fieldValue := message.Value
+		jsonPayloads.Set(fieldNameLower, fieldValue)
+	}
+}
+
+// Helper Function to convert and stores 'model_name' value based on the JSON payload
+func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
+	type task struct {
+		envPrefix string
+		keyPrefix string
+		count     int
+		outputKey string
+	}
+
+	tasks := []task{
+		{"CASE_9_MN_", "MODEL_NAME_RE", 6, "model_name"},
+		{"CASE_9_LI_", "INK_LOT_RE", 4, "ink_lot"},
+	}
+
+	for _, t := range tasks {
+		keyTransformations := GetKeyTransformationsFromEnv(t.envPrefix)
+		var builder strings.Builder
+		var keysToDelete []string
+
+		for i := 1; i <= t.count; i++ {
+			envKey := fmt.Sprintf("%s%d", t.keyPrefix, i)
+
+			deviceKey, ok := keyTransformations[envKey]
+			if !ok {
+				continue
+			}
+
+			val, ok := jsonPayloads.GetString(deviceKey)
+			if !ok {
+				continue
+			}
+
+			builder.WriteString(reverseString(val))
+			keysToDelete = append(keysToDelete, deviceKey)
+		}
+
+		result := builder.String()
+		jsonPayloads.Set(t.outputKey, result)
+
+		// Delete raw device keys after processing
+		for _, key := range keysToDelete {
+			jsonPayloads.Delete(key)
+		}
+
+		//fmt.Printf("%s: %s\n", t.outputKey, result)
+	}
+
+}
+
+func StoreFlattenedPayloadToSession(jsonPayloads *SafeJsonPayloads, session *session.Session) {
+	jsonPayloads.Range(func(key string, value any) {
+		lowerKey := strings.ToLower(key)
+
+		switch v := value.(type) {
+		case map[string]any:
+			for innerKey, innerVal := range v {
+				storeToSession(session, innerKey, innerVal)
+			}
+		default:
+			storeToSession(session, lowerKey, v)
+		}
+	})
+}
+
+func storeToSession(session *session.Session, key string, val any) {
+	session.Mutex.Lock()
+	defer session.Mutex.Unlock()
+	session.ProcessedPayloadsMap[key] = map[string]any{key: val}
 }
