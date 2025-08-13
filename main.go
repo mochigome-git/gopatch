@@ -5,12 +5,14 @@ import (
 	//"net/http"
 	//_ "net/http/pprof"
 
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"gopatch/config"
 	"gopatch/handler"
+	"gopatch/internal/app"
 	"gopatch/mqtts"
 )
 
@@ -31,6 +33,14 @@ func main() {
 
 	// Load configuration
 	config.Load(".env.local")
+
+	logger := log.New(os.Stdout, "[PLC] ", log.LstdFlags)
+	// Create the Application once at startup
+	plcApp, err := app.NewApplication(config.GetPlcConfig(), logger)
+	if err != nil {
+		logger.Fatalf("Failed to init PLC Application: %v", err)
+	}
+	defer plcApp.Close()
 
 	// Channels for communication and termination
 	stopProcessing := make(chan struct{})
@@ -54,7 +64,7 @@ func main() {
 				return
 			default:
 				handler.ProcessMQTTData(
-					config.GetAppConfig(), receivedMessagesJSONChan)
+					config.GetAppConfig(), receivedMessagesJSONChan, plcApp)
 			}
 		}
 	}()

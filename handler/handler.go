@@ -2,6 +2,7 @@ package handler
 
 import (
 	"gopatch/config"
+	"gopatch/internal/app"
 	"gopatch/internal/session"
 	"gopatch/internal/utils"
 	"gopatch/model"
@@ -16,6 +17,7 @@ func Trigger(
 	messages []model.Message,
 	cfg config.AppConfig,
 	rMsgJSONChan <-chan string,
+	plcApp *app.Application,
 ) {
 
 	// Parse trigger keys once
@@ -40,6 +42,7 @@ func Trigger(
 			"weight":            func() { handleWeight(session, jsonPayloads, messages, cfg, false, isAccRate, rMsgJSONChan) },
 			"holdfillingweight": func() { handleHoldFillingWeightCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
 			"holdmcs":           func() { handleHoldMCSCase(session, jsonPayloads, messages, cfg, rMsgJSONChan) },
+			"vacuum":            func() { handleVacuumCase(session, jsonPayloads, cfg, rMsgJSONChan, plcApp) },
 		}
 		// Check if the current caseKey is in the map, and handle accordingly
 		if handler, exists := caseHandlers[tk.CaseKey]; exists {

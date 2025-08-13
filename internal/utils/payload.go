@@ -46,6 +46,38 @@ func (s *SafeJsonPayloads) Clear() {
 	}
 }
 
+func (s *SafeJsonPayloads) GetBool(key string) (bool, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	val, exists := s.data[key]
+	if !exists {
+		return false, false
+	}
+
+	switch v := val.(type) {
+	case bool:
+		return v, true
+	case string:
+		switch strings.TrimSpace(strings.ToLower(v)) {
+		case "true", "1", "yes", "y", "on":
+			return true, true
+		case "false", "0", "no", "n", "off":
+			return false, true
+		default:
+			return false, false
+		}
+	case int:
+		return v != 0, true
+	case int64:
+		return v != 0, true
+	case float64:
+		return v != 0, true
+	default:
+		return false, false
+	}
+}
+
 func (s *SafeJsonPayloads) GetFloat64(key string) (float64, bool) {
 	s.mu.RLock() // Lock for reading
 	defer s.mu.RUnlock()

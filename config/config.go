@@ -17,6 +17,7 @@ var (
 	LoopStr        string  // Looping parameter in string format
 	Loop           float64 // Looping parameter converted to float64
 	Filter         string  // Filter for processing MQTT messages
+	InsertMode     string  // Default Mode : Patch, Option" Upsert
 
 	Broker        string // MQTT broker hostname
 	Port          string // MQTT broker port
@@ -25,6 +26,13 @@ var (
 	ECScaCert     string // ESC version direct read from params store
 	ECSclientCert string // ESC version direct read from params store
 	ECSclientKey  string // ESC version direct read from params store
+
+	PlcHost         string // plcHost stores the PLC's hostname
+	PlcPort         int    // plcPort stores the PLC's port number
+	FxStr           string // Mitsubishi PLC FX series true =1 false =0
+	PlcDevice       string // Mitsubishi PLC Device Number
+	PlcData         string // Data register to PLC Device
+	PlcDeviceUpsert string // Data register to PLC Device for Upsert
 )
 
 type MqttConfig struct {
@@ -57,6 +65,9 @@ type AppConfig struct {
 	LoopStr        string
 	Loop           float64
 	Filter         string
+	InsertMode     string
+
+	Plc PlcConfig
 }
 
 func GetAppConfig() AppConfig {
@@ -68,6 +79,29 @@ func GetAppConfig() AppConfig {
 		LoopStr:        LoopStr,
 		Loop:           Loop,
 		Filter:         Filter,
+		InsertMode:     InsertMode,
+
+		Plc: GetPlcConfig(),
+	}
+}
+
+type PlcConfig struct {
+	PlcHost         string // plcHost stores the PLC's hostname
+	PlcPort         int    // plcPort stores the PLC's port number
+	FxStr           string // Mitsubishi PLC FX series true =1 false =0
+	PlcDevice       string
+	PlcData         string
+	PlcDeviceUpsert string
+}
+
+func GetPlcConfig() PlcConfig {
+	return PlcConfig{
+		PlcHost:         PlcHost,
+		PlcPort:         PlcPort,
+		FxStr:           FxStr,
+		PlcDevice:       PlcDevice,
+		PlcData:         PlcData,
+		PlcDeviceUpsert: PlcDeviceUpsert,
 	}
 }
 
@@ -88,6 +122,7 @@ func Load(files ...string) {
 	Function = getEnv("BASH_API", "")
 	Trigger = getEnv("TRIGGER_DEVICE", "")
 	Filter = getEnv("FILTER", "d174")
+	InsertMode = os.Getenv("INSERT_MODE")
 
 	LoopStr = getEnv("LOOPING", "1")
 	Loop, _ = strconv.ParseFloat(LoopStr, 64)
@@ -99,6 +134,15 @@ func Load(files ...string) {
 	ECScaCert = os.Getenv("ECS_MQTT_CA_CERTIFICATE")
 	ECSclientCert = os.Getenv("ECS_MQTT_CLIENT_CERTIFICATE")
 	ECSclientKey = os.Getenv("ECS_MQTT_PRIVATE_KEY")
+
+	PlcHost = os.Getenv("PLC_HOST")
+	PlcPortStr := getEnv("PLC_PORT", "5011")
+	PlcPort, _ = strconv.Atoi(PlcPortStr) // int for port
+	FxStr = os.Getenv("PLC_MODEL")
+	PlcDevice = os.Getenv("PLC_DEVICE")
+	PlcData = os.Getenv("PLC_DATA")
+	PlcDeviceUpsert = os.Getenv("PLC_DEVICE_UPSERT")
+
 }
 
 // Helper to get environment variable with fallback

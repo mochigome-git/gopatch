@@ -8,7 +8,6 @@ import (
 	"gopatch/internal/utils"
 	"gopatch/model"
 	"gopatch/patch"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -153,7 +152,7 @@ func handleHoldFillingCase(session *session.Session, jsonPayloads *utils.SafeJso
 			keys := []string{
 				"ch1", "ch2", "ch3", "do",
 			}
-			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan, nil)
 		}
 
 	}
@@ -191,7 +190,7 @@ func handleWeight(session *session.Session, jsonPayloads *utils.SafeJsonPayloads
 		keys := []string{
 			"ch1_", "ch2_", "ch3_", "vacuum", "weightch1_", "weightch2_", "weightch3_", "counterch_",
 		}
-		processPatch(session, keys, cfg, func() { session.IsProcessing = false }, rMsgJSONChan)
+		processPatch(session, keys, cfg, func() { session.IsProcessing = false }, rMsgJSONChan, nil)
 	}
 
 }
@@ -242,7 +241,7 @@ func handleHoldFillingWeightCase(session *session.Session, jsonPayloads *utils.S
 			keys := []string{
 				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_",
 			}
-			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan, nil)
 		}
 
 	}
@@ -298,87 +297,11 @@ func handleHoldMCSCase(session *session.Session, jsonPayloads *utils.SafeJsonPay
 			keys := []string{
 				"ch1", "ch2", "ch3", "do", "weightch1_", "weightch2_", "weightch3_", "ink_lot", "model_name", "lower_limit", "standard", "upper_limit",
 			}
-			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan)
+			processPatch(session, keys, cfg, func() { prevDo = false }, rMsgJSONChan, nil)
 		}
 
 	}
 
-}
-
-func shouldPatch(caseID string, ready bool, session *session.Session) bool {
-	if caseID == "case7" || caseID == "case8" {
-		// Case 7 & Case 8: Wait for all channels to deactivate after being active
-		return !session.WeightTriggerCh1 && !session.WeightTriggerCh2 && !session.WeightTriggerCh3 &&
-			session.PrevWeightTriggerCh1 && session.PrevWeightTriggerCh2 && session.PrevWeightTriggerCh3 && ready
-	}
-	// Default: don't patch
-	return false
-}
-
-// Reset previous triggers to avoid reprocessing
-func resetWeightTriggers(session *session.Session) {
-	session.AllSuccessZero = false
-	session.IsProcessing = false
-	session.PrevWeightTriggerCh1 = false
-	session.PrevWeightTriggerCh2 = false
-	session.PrevWeightTriggerCh3 = false
-	*session.PrevWeightValueCh1 = 0
-	*session.PrevWeightValueCh2 = 0
-	*session.PrevWeightValueCh3 = 0
-}
-
-func processPatch(session *session.Session, keys []string, cfg config.AppConfig, after func(), rMsgJSONChan <-chan string) {
-	fmt.Println("All weight triggers are now inactive. Processing the patch.")
-
-	parts := []map[string]any{}
-	for _, key := range keys {
-		parts = append(parts, session.ProcessedPayloadsMap[key])
-	}
-	data := mergeNonEmptyMaps(parts...)
-
-	// Count top-level nil values
-	nullCount := 0
-	for _, value := range data {
-		if value == nil {
-			nullCount++
-		}
-	}
-	if nullCount > 3 {
-		fmt.Println("Aborting patch: more than 3 null values in data")
-		resetWeightTriggers(session)
-		if after != nil {
-			after()
-		}
-		drainChannel(rMsgJSONChan)
-		return
-	}
-
-	startTime := time.Now()
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println("Error marshaling JSON:", err)
-		return
-	}
-
-	if _, err := patch.SendPatchRequest(cfg.APIUrl, cfg.ServiceRoleKey, jsonData, cfg.Function); err != nil {
-		log.Fatal("Error sending patch request:", err)
-	}
-
-	prettyPrintJSONWithTime(data, time.Since(startTime))
-
-	for key := range session.ProcessedPayloadsMap {
-		delete(session.ProcessedPayloadsMap, key)
-	}
-
-	// Always reset weight triggers
-	resetWeightTriggers(session)
-
-	// Call the extra cleanup if provided
-	if after != nil {
-		after()
-	}
-
-	drainChannel(rMsgJSONChan)
 }
 
 // Helper Function to merges non-empty maps and returns a new map.
