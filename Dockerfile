@@ -21,8 +21,9 @@ CMD ["/app/patch_app"]
 
 
 # Build Image with command
-# docker build --no-cache -t patch:1.76v.ecs .
-# docker tag patch:1.76v.ecs mochigome/patch:1.76v.ecs
-# docker push mochigome/patch:1.76v.ecs
+# docker build --no-cache -t patch:1.8v.ecs .
+# docker tag patch:1.8v.ecs mochigome/patch:1.8v.ecs
+# docker push mochigome/patch:1.8v.ecs
 
-# current version : 1.76v.ecs
+
+# current version : 1.8v.ecs

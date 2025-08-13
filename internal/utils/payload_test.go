@@ -69,10 +69,11 @@ func TestSafeJsonPayloads_GetString(t *testing.T) {
 
 	// Check type mismatch
 	payloads.Set("wrongType", 42)
-	_, ok = payloads.GetString("wrongType")
-	if ok {
-		t.Error("Expected type assertion to string to fail")
+	s, ok = payloads.GetString("wrongType")
+	if !ok || s != "42" {
+		t.Errorf("Expected '42', got '%v'", s)
 	}
+
 }
 
 func TestSafeJsonPayloads_GetData(t *testing.T) {
