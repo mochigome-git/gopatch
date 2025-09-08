@@ -57,8 +57,15 @@ func SendUpsertRequest(apiUrl, serviceRoleKey string, jsonPayload []byte, cfg co
 	}
 
 	var result []VacuumData
+
+	// Try to unmarshal as array first
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response JSON: %v", err)
+		// If it fails, try single object
+		var single VacuumData
+		if err2 := json.Unmarshal(body, &single); err2 != nil {
+			return nil, fmt.Errorf("failed to parse response JSON: %v", err)
+		}
+		result = append(result, single)
 	}
 
 	if len(result) > 0 && plcApp != nil {

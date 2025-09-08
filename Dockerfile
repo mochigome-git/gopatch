@@ -21,9 +21,17 @@ CMD ["/app/patch_app"]
 
 
 # Build Image with command
+# docker buildx create --use
+# docker buildx build \
+#   --platform linux/amd64,linux/arm64 \
+#   -t mochigome/patch:1.9v.ecs \
+#   --push .
+
+
+# legacy build
 # docker build --no-cache -t patch:1.8v.ecs .
 # docker tag patch:1.8v.ecs mochigome/patch:1.8v.ecs
 # docker push mochigome/patch:1.8v.ecs
 
 
-# current version : 1.8v.ecs
+# current version : 1.9v.ecs

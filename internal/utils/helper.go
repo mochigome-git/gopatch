@@ -279,8 +279,10 @@ func ConvertAndStoreModelName(jsonPayloads *SafeJsonPayloads) {
 
 		result := builder.String()
 		if result != "" {
-			jsonPayloads.Set(t.outputKey, result)
+			cleaned := sanitizeString(result)
+			jsonPayloads.Set(t.outputKey, cleaned)
 		}
+
 	}
 
 	// Now safely delete used keys
@@ -308,4 +310,12 @@ func storeToSession(session *session.Session, key string, val any) {
 	session.Mutex.Lock()
 	defer session.Mutex.Unlock()
 	session.ProcessedPayloadsMap[key] = map[string]any{key: val}
+}
+
+func sanitizeString(s string) string {
+	// Remove null bytes
+	s = strings.ReplaceAll(s, "\x00", "")
+	// Trim leading/trailing spaces (optional, depending on your PLC data)
+	s = strings.TrimSpace(s)
+	return s
 }
